@@ -146,3 +146,10 @@ docs/plan/*
 # models & env
 asr-service/models
 asr-service/bin
+asr-service/venv
+
+# Python test artifacts
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
