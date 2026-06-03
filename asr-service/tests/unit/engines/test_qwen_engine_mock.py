@@ -4,6 +4,7 @@
 """
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 from app.engines.qwen_asr_engine import QwenASREngine
@@ -68,6 +69,40 @@ def test_batch_transcribe_passes_params():
     eng._model.transcribe.assert_called_once_with(
         audio=["1.wav", "2.wav"], language="en", return_time_stamps=True,
     )
+
+
+# ─── T05: transcribe_array（内存数组解码）───
+
+def test_transcribe_array_requires_loaded():
+    with pytest.raises(RuntimeError):
+        QwenASREngine().transcribe_array(np.zeros(10, dtype=np.float32))
+
+
+def test_transcribe_array_passes_tuple_and_align():
+    eng = QwenASREngine(enable_align=True)
+    eng._model = MagicMock()
+    eng._model.transcribe.return_value = ["r"]
+    audio = np.zeros(8, dtype=np.float32)
+
+    out = eng.transcribe_array(audio, sr=16000, language="zh")
+
+    assert out == ["r"]
+    kwargs = eng._model.transcribe.call_args.kwargs
+    # audio 以 (ndarray, sr) 元组传入
+    assert kwargs["audio"][0] is audio
+    assert kwargs["audio"][1] == 16000
+    assert kwargs["language"] == "zh"
+    assert kwargs["return_time_stamps"] is True
+
+
+def test_transcribe_array_align_false():
+    eng = QwenASREngine(enable_align=False)
+    eng._model = MagicMock()
+    eng._model.transcribe.return_value = []
+    eng.transcribe_array(np.zeros(4, dtype=np.float32), sr=8000)
+    kwargs = eng._model.transcribe.call_args.kwargs
+    assert kwargs["audio"][1] == 8000
+    assert kwargs["return_time_stamps"] is False
 
 
 def test_load_assembles_kwargs_and_sets_model(mocker):

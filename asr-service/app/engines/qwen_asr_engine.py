@@ -116,6 +116,32 @@ class QwenASREngine:
         )
         return results
 
+    def transcribe_array(
+        self,
+        audio,
+        sr: int = 16000,
+        language: str | None = None,
+    ) -> list:
+        """对内存音频数组执行 ASR 识别（实时逐句解码，不落盘）。
+
+        参数:
+            audio: np.ndarray（float32/int16，单声道）
+            sr: 采样率
+            language: 语言（可选）
+
+        返回:
+            [ASRTranscription, ...]
+        """
+        if self._model is None:
+            raise RuntimeError("ASR 模型未加载，请先调用 load()")
+
+        results = self._model.transcribe(
+            audio=(audio, sr),
+            language=language,
+            return_time_stamps=self._enable_align,
+        )
+        return results
+
     def unload(self):
         self._model = None
         if self._device.startswith("cuda"):
