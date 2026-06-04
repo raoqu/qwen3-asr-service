@@ -327,7 +327,7 @@
       };
     },
     template: `
-      <div>
+      <div class="page-flex">
         <div class="workspace">
           <div class="side-col">
             <n-card :bordered="false" class="panel" size="small">
@@ -379,7 +379,7 @@
           </div>
         </div>
 
-        <n-card :bordered="false" class="panel" size="small" style="margin-top:20px;">
+        <n-card :bordered="false" class="panel dock-card" :class="{ open: taskList.open }" size="small" style="margin-top:20px;">
           <n-space justify="space-between" align="center">
             <n-button text style="font-size:.95em;font-weight:600;" @click="toggleTaskList">
               <a-icon name="list" size="15" style="margin-right:7px;color:#14b8a6;"></a-icon>任务历史
@@ -390,13 +390,13 @@
               <n-button size="small" tertiary :loading="taskList.loading" @click="manualRefresh">刷新</n-button>
             </n-space>
           </n-space>
-          <template v-if="taskList.open">
+          <div v-if="taskList.open" class="dock-body" style="margin-top:12px;">
             <n-data-table :columns="columns" :data="taskList.rows" :row-props="rowProps" :loading="taskList.loading && !taskList.loaded"
-                          :row-key="row => row.task_id" :scroll-x="680" size="small" style="margin-top:12px;"></n-data-table>
+                          :row-key="row => row.task_id" :scroll-x="680" size="small"></n-data-table>
             <n-text v-if="taskList.loaded" depth="3" class="poll-note">
               列表自动刷新：进行中任务每 3 秒，空闲每 30 秒；含持久化历史记录
             </n-text>
-          </template>
+          </div>
         </n-card>
 
         <n-modal v-model:show="viewer.show" preset="card" :title="'任务详情：' + viewer.title" style="max-width:760px;">

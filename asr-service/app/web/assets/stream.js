@@ -5,7 +5,7 @@
  */
 (function () {
   'use strict';
-  const { ref, reactive, computed, onMounted, onBeforeUnmount } = Vue;
+  const { ref, reactive, computed, watch, onMounted, onBeforeUnmount } = Vue;
   const { fmtMs, apiKey, mountApp } = window.AsrCommon;
 
   const RT_SR = 16000;
@@ -62,6 +62,12 @@
         if (finals.length > MAX_TRANSCRIPT_LINES) finals.shift();
       }
       function clearResults() { finals.length = 0; partial.value = ''; }
+
+      // 满高布局下转写区内部滚动：新 final/partial 到达时跟随滚底
+      const transcriptRef = ref(null);
+      watch([() => finals.length, partial], () => {
+        Vue.nextTick(() => { const el = transcriptRef.value; if (el) el.scrollTop = el.scrollHeight; });
+      });
 
       // —— 协议日志 ——
       const logs = reactive([]);          // {key, ts, kind, text}
@@ -387,14 +393,14 @@
         lang,
         streamState, statusText, busy, source,
         capWarning, hint, capInfo, diag, vuRef,
-        finals, partial, fmtMs,
+        finals, partial, fmtMs, transcriptRef,
         logs, logOpen, logRef,
         fileInputRef, noThrottle, fileProgress, fileRunning,
         startMic, stopMic, startFile, stopFile,
       };
     },
     template: `
-      <div>
+      <div class="page-flex">
         <n-alert v-if="capWarning" type="warning" :show-icon="true" style="margin-bottom:16px;">{{ capWarning }}</n-alert>
 
         <n-card :bordered="false" class="panel" size="small" style="margin-bottom:20px;">
@@ -453,7 +459,7 @@
           <div class="main-col">
             <n-card :bordered="false" class="panel" size="small">
               <template #header><span class="panel-title"><a-icon name="doc" size="15"></a-icon>转写结果</span></template>
-              <div id="transcript">
+              <div id="transcript" ref="transcriptRef">
                 <n-empty v-if="!finals.length && !partial" description="等待音频输入…" size="small" style="margin:24px 0;"></n-empty>
                 <div v-for="line in finals" :key="line.key" class="transcript-line">
                   <span class="t">{{ line.start != null ? fmtMs(line.start) : '' }}</span>
@@ -465,7 +471,7 @@
           </div>
         </div>
 
-        <n-card :bordered="false" class="panel" size="small" style="margin-top:20px;">
+        <n-card :bordered="false" class="panel dock-card" :class="{ open: logOpen }" size="small" style="margin-top:20px;">
           <n-space justify="space-between" align="center">
             <n-button text style="font-size:.95em;font-weight:600;" @click="logOpen = !logOpen">
               <a-icon name="doc" size="15" style="margin-right:7px;color:#14b8a6;"></a-icon>协议日志
@@ -473,7 +479,7 @@
             </n-button>
             <n-button v-if="logOpen" size="tiny" tertiary @click="logs.length = 0">清空</n-button>
           </n-space>
-          <div v-if="logOpen" ref="logRef" class="proto-log" style="margin-top:10px;">
+          <div v-if="logOpen" ref="logRef" class="proto-log dock-body" style="margin-top:10px;">
             <div v-for="l in logs" :key="l.key" :class="l.kind">{{ l.ts }} {{ l.kind === 'send' ? '→' : l.kind === 'recv' ? '←' : '•' }} {{ l.text }}</div>
             <div v-if="!logs.length">（暂无消息）</div>
           </div>
