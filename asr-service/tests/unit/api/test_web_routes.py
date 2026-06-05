@@ -49,3 +49,20 @@ def test_stream_page_loaded_from_disk():
     # page.py 应已成功读入 stream.html（非空）
     from app.web.page import STREAM_PAGE
     assert STREAM_PAGE and len(STREAM_PAGE) > 500
+
+
+def test_web_ui_speakers_page():
+    resp = _client().get("/web-ui/speakers")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "<!DOCTYPE html>" in html
+    assert 'id="app"' in html
+    assert "/web-ui/assets/speakers.js" in html
+    assert "/web-ui/assets/common.js" in html
+
+
+def test_speakers_nav_present_on_all_pages():
+    # appbar 各页入口可达（V5 验收项）
+    c = _client()
+    for path in ("/web-ui", "/web-ui/stream", "/web-ui/speakers"):
+        assert "/web-ui/speakers" in c.get(path).text

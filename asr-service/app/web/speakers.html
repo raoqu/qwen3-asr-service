@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>实时转写 - Qwen3-ASR Service</title>
+<title>说话人管理 - Qwen3-ASR Service</title>
 <script src="/web-ui/assets/vendor/vue-3.5.35.global.prod.js"></script>
 <script src="/web-ui/assets/vendor/naive-ui-2.44.1.prod.js"></script>
 <link rel="stylesheet" href="/web-ui/assets/app.css">
 </head>
-<body class="app-fullh">
+<body>
 <div id="app">
   <n-config-provider :theme="theme" :theme-overrides="themeOverrides">
     <n-global-style></n-global-style>
@@ -19,8 +19,8 @@
         </a>
         <nav class="appnav">
           <a href="/web-ui">离线转写</a>
-          <a href="/web-ui/stream" class="active">实时转写</a>
-          <a href="/web-ui/speakers">说话人</a>
+          <a href="/web-ui/stream">实时转写</a>
+          <a href="/web-ui/speakers" class="active">说话人</a>
           <a href="/web-ui/docs">文档</a>
         </nav>
         <div class="appbar-right">
@@ -43,12 +43,14 @@
     </header>
     <div class="container">
       <n-message-provider>
-        <app-body></app-body>
+        <n-dialog-provider>
+          <app-body></app-body>
+        </n-dialog-provider>
       </n-message-provider>
     </div>
   </n-config-provider>
 </div>
 <script src="/web-ui/assets/common.js"></script>
-<script src="/web-ui/assets/stream.js"></script>
+<script src="/web-ui/assets/speakers.js"></script>
 </body>
 </html>

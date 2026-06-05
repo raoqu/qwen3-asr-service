@@ -54,11 +54,11 @@
       const capInfo = ref('');
 
       // —— 结果 ——
-      const finals = reactive([]);        // {key, start, text, words, speaker}
+      const finals = reactive([]);        // {key, start, text, words, speaker, speakerName}
       const partial = ref('');
       let finalSeq = 0;
       function appendFinal(m) {
-        finals.push({ key: ++finalSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null });
+        finals.push({ key: ++finalSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null });
         if (finals.length > MAX_TRANSCRIPT_LINES) finals.shift();
       }
       // 说话人徽标取色：标签字母 → 固定 8 色板下标（同标签恒同色）
@@ -523,7 +523,7 @@
                 <n-empty v-if="!finals.length && !partial" description="等待音频输入…" size="small" style="margin:24px 0;"></n-empty>
                 <div v-for="line in finals" :key="line.key" class="transcript-line">
                   <span class="t">{{ line.start != null ? fmtMs(line.start) : '' }}</span>
-                  <span class="tx"><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> ({{ line.words }} 词)</n-text></span>
+                  <span class="tx"><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> ({{ line.words }} 词)</n-text></span>
                 </div>
                 <div v-if="partial" class="partial-line">{{ partial }}<span class="cursor-blk"></span></div>
               </div>

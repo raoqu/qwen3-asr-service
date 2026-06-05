@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from app.web.views import web_router, ASSETS_DIR
 
 VENDOR_FILES = ["vue-3.5.35.global.prod.js", "naive-ui-2.44.1.prod.js"]
-PAGE_SCRIPTS = ["common.js", "offline.js", "stream.js", "pcm-worklet.js"]
+PAGE_SCRIPTS = ["common.js", "offline.js", "stream.js", "speakers.js", "pcm-worklet.js"]
 
 
 @pytest.fixture(scope="module")
@@ -91,3 +91,14 @@ def test_stream_js_protocol_markers():
     assert "/v2/asr/stream" in src
     assert "/v2/capabilities" in src
     assert "/web-ui/assets/pcm-worklet.js" in src
+
+
+def test_speakers_js_management_markers():
+    # 说话人管理页关键标记：列表/PATCH/DELETE 走 /v2/speakers，鉴权与降级指引
+    with open(os.path.join(ASSETS_DIR, "speakers.js"), encoding="utf-8") as f:
+        src = f.read()
+    assert "/v2/speakers" in src
+    assert "authHeaders" in src
+    assert "PATCH" in src and "DELETE" in src
+    assert "model_tag_mismatch" in src          # 降级指引分支
+    assert "硬删除不可恢复" in src               # 删除二次确认文案

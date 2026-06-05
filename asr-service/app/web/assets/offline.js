@@ -39,7 +39,19 @@
       function seek(seg) { if (props.onSeek && seg.start != null) props.onSeek(seg); }
       // 说话人徽标取色：标签字母 → 固定 8 色板下标（同标签恒同色）
       function spkIdx(label) { return ((label.charCodeAt(0) - 65) % 8 + 8) % 8; }
-      return { result, segments, metaTags, jsonText, downloadJson, seek, fmtTime, spkIdx };
+      // 声纹识别开启时 result.speakers 为映射表（含 score）；纯标签列表时为空映射
+      const spkMeta = computed(() => {
+        const map = {};
+        (result.value.speakers || []).forEach(s => { if (s && typeof s === 'object') map[s.label] = s; });
+        return map;
+      });
+      function spkTitle(seg) {
+        const m = spkMeta.value[seg.speaker];
+        if (!m) return seg.speaker_name ? '' : '匿名说话人';
+        if (m.auto_enrolled) return '自动登记（可在说话人管理页改名）';
+        return m.score != null ? '声纹相似度 ' + m.score.toFixed(2) : '';
+      }
+      return { result, segments, metaTags, jsonText, downloadJson, seek, fmtTime, spkIdx, spkTitle };
     },
     template: `
       <div>
@@ -51,7 +63,7 @@
         <div v-else>
           <div v-for="(seg, i) in segments" :key="i" class="seg-row" :class="{ static: !onSeek }" @click="seek(seg)">
             <span class="seg-time">{{ fmtTime(seg.start) }}</span>
-            <span class="seg-text"><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)">{{ seg.speaker }}</span>{{ seg.text }}</span>
+            <span class="seg-text"><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)" :title="spkTitle(seg)">{{ seg.speaker_name || seg.speaker }}</span>{{ seg.text }}</span>
             <span v-if="onSeek" class="seg-play"><a-icon name="play" size="14"></a-icon></span>
           </div>
         </div>
