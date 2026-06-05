@@ -35,6 +35,15 @@ LEGACY_DEFAULTS = {
     "speaker_max": 8,
     "speaker_min_seg_ms": 1500,
     "speaker_max_windows": 4000,
+    # ── V 系列（声纹库）新增，非重构前遗留 ──
+    "enable_speaker_db": False,
+    "speaker_db_path": "data/speakers.db",
+    "speaker_id_threshold": 0.45,
+    "speaker_id_margin": 0.10,
+    "speaker_enroll_min_sec": 3.0,
+    "speaker_auto_enroll": True,
+    "speaker_auto_enroll_min_sec": 10.0,
+    "speaker_store_audio": False,
 }
 
 
@@ -84,6 +93,9 @@ def test_explicit_default_value_still_present():
     ("--no-web", "web"),
     ("--no-stream", "enable_stream"),
     ("--no-speaker", "enable_speaker"),
+    ("--no-speaker-db", "enable_speaker_db"),
+    ("--no-speaker-auto-enroll", "speaker_auto_enroll"),
+    ("--no-speaker-store-audio", "speaker_store_audio"),
 ])
 def test_negative_flags_force_false(flag, attr):
     """全部布尔开关都有反向 flag——CLI 才能把配置文件设 true 的开关覆盖回 false。"""

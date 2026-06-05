@@ -38,7 +38,10 @@ def isolated_create_app(tmp_path, monkeypatch):
     keys = ("MODEL_SOURCE", "MAX_SEGMENT_DURATION", "HOST", "PORT", "API_KEY", "MAX_QUEUE_SIZE",
             "SERVE_MODE", "ENABLE_STREAM", "MAX_STREAM_SESSIONS", "STREAM_ASR_CONCURRENCY",
             "CONFIG_FILE", "ENABLE_SPEAKER", "SPEAKER_THRESHOLD", "SPEAKER_MAX",
-            "SPEAKER_MIN_SEG_MS", "SPEAKER_MAX_WINDOWS")
+            "SPEAKER_MIN_SEG_MS", "SPEAKER_MAX_WINDOWS",
+            "ENABLE_SPEAKER_DB", "SPEAKER_DB_PATH", "SPEAKER_ID_THRESHOLD", "SPEAKER_ID_MARGIN",
+            "SPEAKER_ENROLL_MIN_SEC", "SPEAKER_AUTO_ENROLL", "SPEAKER_AUTO_ENROLL_MIN_SEC",
+            "SPEAKER_STORE_AUDIO")
     snapshot = {k: getattr(cfg, k) for k in keys}
 
     yield
@@ -370,3 +373,87 @@ def test_apply_cli_config_writes_speaker(monkeypatch):
     finally:
         for k, v in saved.items():
             setattr(cfg, k, v)
+
+
+# ─── V 系列：声纹库降级矩阵四分支 ───
+
+class _OkSpeaker:
+    MODEL_TAG = "campplus_cn_common@v1"
+    def __init__(self, *a, **k): pass
+    def load(self): pass
+
+
+def test_speaker_db_degrades_without_speaker_engine(isolated_create_app, monkeypatch, tmp_path):
+    """分支①：未开 enable_speaker → 声纹库降级关闭，服务正常。"""
+    import app.main as main
+    _mock_standard_engines(monkeypatch)
+
+    app = main.create_app(_args(device="auto", enable_speaker_db=True, api_key="k",
+                                speaker_db_path=str(tmp_path / "spk.db")))
+    client = TestClient(app)
+    health = client.get("/v2/health", headers={"Authorization": "Bearer k"}).json()
+    assert health["status"] == "ready"
+    assert health["speaker_db_enabled"] is False
+    r = client.get("/v2/speakers", headers={"Authorization": "Bearer k"})
+    assert r.status_code == 503 and r.json()["detail"] == "speaker_db_disabled"
+
+
+def test_speaker_db_degrades_without_api_key(isolated_create_app, monkeypatch, tmp_path):
+    """分支②：API_KEY 为空 → 合规硬规则降级关闭。"""
+    import app.main as main
+    _mock_standard_engines(monkeypatch)
+    monkeypatch.setattr(
+        "app.engines.speaker_embedding_engine.SpeakerEmbeddingEngine", _OkSpeaker)
+
+    app = main.create_app(_args(device="auto", enable_speaker=True,
+                                enable_speaker_db=True,
+                                speaker_db_path=str(tmp_path / "spk.db")))
+    client = TestClient(app)
+    health = client.get("/v2/health").json()
+    assert health["speaker_enabled"] is True            # 分离正常
+    assert health["speaker_db_enabled"] is False        # 声纹库降级
+    assert client.get("/v2/speakers").status_code == 503
+
+
+def test_speaker_db_enabled_full_path(isolated_create_app, monkeypatch, tmp_path):
+    """分支④（正常）：引擎+API_KEY+建库全通 → 端点可用、capabilities 置位。"""
+    import app.main as main
+    _mock_standard_engines(monkeypatch)
+    monkeypatch.setattr(
+        "app.engines.speaker_embedding_engine.SpeakerEmbeddingEngine", _OkSpeaker)
+
+    app = main.create_app(_args(device="auto", enable_speaker=True, api_key="k",
+                                enable_speaker_db=True,
+                                speaker_db_path=str(tmp_path / "spk.db")))
+    client = TestClient(app)
+    auth = {"Authorization": "Bearer k"}
+    health = client.get("/v2/health", headers=auth).json()
+    assert health["speaker_db_enabled"] is True
+    caps = client.get("/v2/capabilities", headers=auth).json()
+    assert caps["speaker_identification"] is True
+    body = client.get("/v2/speakers", headers=auth).json()
+    assert body == {"total": 0, "speakers": []}          # 空库可列
+
+
+def test_speaker_db_degrades_on_store_failure(isolated_create_app, monkeypatch, tmp_path):
+    """分支③：建库失败 → 降级关闭，服务正常启动。"""
+    import app.main as main
+    _mock_standard_engines(monkeypatch)
+    monkeypatch.setattr(
+        "app.engines.speaker_embedding_engine.SpeakerEmbeddingEngine", _OkSpeaker)
+
+    class BoomStore:
+        def __init__(self, *a, **k):
+            raise RuntimeError("disk full")
+
+    monkeypatch.setattr("app.runtime.speaker_store.SpeakerStore", BoomStore)
+
+    app = main.create_app(_args(device="auto", enable_speaker=True, api_key="k",
+                                enable_speaker_db=True,
+                                speaker_db_path=str(tmp_path / "spk.db")))
+    client = TestClient(app)
+    auth = {"Authorization": "Bearer k"}
+    health = client.get("/v2/health", headers=auth).json()
+    assert health["status"] == "ready"
+    assert health["speaker_db_enabled"] is False
+    assert client.get("/v2/speakers", headers=auth).status_code == 503

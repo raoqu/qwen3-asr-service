@@ -150,6 +150,49 @@ ARG_SPECS = (
         group="说话人分离",
         help="离线滑窗数上限，超出均匀抽稀（超长音频内存防护） (default: 4000)",
     ),
+    ArgSpec(
+        key="enable_speaker_db", flags=("--enable-speaker-db",), default=False, type=bool,
+        group="声纹库",
+        help="声纹库（登记+真名识别）：依赖 --enable-speaker 且必须配置 api_key",
+        negative_flags=("--no-speaker-db",), negative_help="关闭声纹库（覆盖配置文件）",
+    ),
+    ArgSpec(
+        key="speaker_db_path", flags=("--speaker-db-path",), default="data/speakers.db",
+        group="声纹库",
+        help="声纹库路径，相对服务根目录；数据永不自动清理 (default: data/speakers.db)",
+    ),
+    ArgSpec(
+        key="speaker_id_threshold", flags=("--speaker-id-threshold",), default=0.45, type=float,
+        group="声纹库",
+        help="1:N 开集识别阈 τ_id，低于此为 unknown (default: 0.45)",
+    ),
+    ArgSpec(
+        key="speaker_id_margin", flags=("--speaker-id-margin",), default=0.10, type=float,
+        group="声纹库",
+        help="top1-top2 margin，差距小于此判 unknown（宁缺勿错） (default: 0.10)",
+    ),
+    ArgSpec(
+        key="speaker_enroll_min_sec", flags=("--speaker-enroll-min-sec",), default=3.0, type=float,
+        group="声纹库",
+        help="手动登记单样本最短有效语音秒数（VAD 后） (default: 3.0)",
+    ),
+    ArgSpec(
+        key="speaker_auto_enroll", flags=("--speaker-auto-enroll",), default=True, type=bool,
+        group="声纹库",
+        help="离线识别未命中的簇自动以「说话人_NN」登记（开启=部署方声明已获数据主体同意）",
+        negative_flags=("--no-speaker-auto-enroll",), negative_help="关闭自动登记（覆盖配置文件）",
+    ),
+    ArgSpec(
+        key="speaker_auto_enroll_min_sec", flags=("--speaker-auto-enroll-min-sec",),
+        default=10.0, type=float, group="声纹库",
+        help="自动登记的簇最短语音总时长秒数（严于手动登记） (default: 10.0)",
+    ),
+    ArgSpec(
+        key="speaker_store_audio", flags=("--speaker-store-audio",), default=False, type=bool,
+        group="声纹库",
+        help="留存登记样本音频到 data/speaker_audio/（扩大合规面，默认关）",
+        negative_flags=("--no-speaker-store-audio",), negative_help="不留存登记样本音频",
+    ),
 )
 
 

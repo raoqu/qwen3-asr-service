@@ -230,6 +230,7 @@ def test_example_passes_schema_validation():
     assert parsed["api_key"] == ""
     assert parsed["enable_task_store"] is True   # P 系列：example 默认开启（schema 默认关闭）
     assert parsed["enable_speaker"] is False     # S 系列：example 默认关闭（与 schema 一致）
+    assert parsed["enable_speaker_db"] is False  # V 系列：example 默认关闭（依赖 api_key）
 
 
 # ─── float 类型（S 系列 speaker_threshold）───
