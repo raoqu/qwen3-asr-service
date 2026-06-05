@@ -23,6 +23,7 @@ ASR_MODEL_DIR = os.path.join(MODELS_DIR, "asr")
 ALIGN_MODEL_DIR = os.path.join(MODELS_DIR, "align")
 VAD_MODEL_DIR = os.path.join(MODELS_DIR, "vad")
 PUNC_MODEL_DIR = os.path.join(MODELS_DIR, "punc")
+SPEAKER_MODEL_DIR = os.path.join(MODELS_DIR, "speaker")
 
 # OpenVINO 模型仓库（HuggingFace）
 OV_MODEL_REPO_MAP = {
@@ -50,6 +51,7 @@ MODELSCOPE_ONLY_REPO_MAP = {
     "vad_onnx": "iic/speech_fsmn_vad_zh-cn-16k-common-onnx",
     "punc": "iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
     "punc_onnx": "iic/punc_ct-transformer_zh-cn-common-vocab272727-onnx",
+    "campplus": "iic/speech_campplus_sv_zh-cn_16k-common",
 }
 
 # 模型本地子目录
@@ -63,6 +65,7 @@ MODEL_LOCAL_MAP = {
     "punc_onnx": os.path.join(PUNC_MODEL_DIR, "ct-transformer-onnx"),
     "asr_ov_0.6b": os.path.join(ASR_MODEL_DIR, "openvino", "0.6b"),
     "asr_ov_1.7b": os.path.join(ASR_MODEL_DIR, "openvino", "1.7b"),
+    "campplus": os.path.join(SPEAKER_MODEL_DIR, "campplus"),
 }
 
 # ─── VAD 参数 ───
