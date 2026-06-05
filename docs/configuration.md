@@ -16,6 +16,7 @@
 - [配置文件（config.yaml）](#配置文件configyaml)
 - [环境变量](#环境变量)
 - [离线任务持久化（tasks.db）](#离线任务持久化tasksdb)
+- [说话人分离与声纹库（speakers.db）](#说话人分离与声纹库speakersdb)
 - [内置常量（app/config.py）](#内置常量appconfigpy)
 
 ---
@@ -62,6 +63,29 @@
 | `--task-db-path` | 路径 | `data/tasks.db` | 任务库路径（相对服务根目录） |
 | `--task-retention-days` | 天数 | `7` | 过期任务清理窗口，启动时执行；`0` = 永不清理 |
 
+### 说话人分离
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--enable-speaker` / `--no-speaker` | - | 关闭 | 说话人分离：离线 `segments[].speaker` / 实时 `final.speaker`（匿名 A/B/C…）；CAM++ 模型 28MB 首次自动下载，CPU 推理不占显存 |
+| `--speaker-threshold` | 0–1 | `0.5` | 实时在线归簇余弦阈值（实测可用区间 0.35–0.65；调高更易分人、调低更易并人） |
+| `--speaker-max` | 数字 | `8` | 说话人数上限（实时硬上限；离线谱聚类簇数搜索上界） |
+| `--speaker-min-seg-ms` | 毫秒 | `1500` | 实时短段门槛：短于此的段不建新簇/不更新质心（声纹特征在 ≥1.5s 才稳定） |
+| `--speaker-max-windows` | 数字 | `4000` | 离线滑窗数上限，超出均匀抽稀（超长音频聚类内存防护） |
+
+### 声纹库
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--enable-speaker-db` / `--no-speaker-db` | - | 关闭 | 声纹库（登记 + 真名识别）：依赖 `enable_speaker` 且**必须配置 `api_key`**（声纹属生物识别信息，不允许无鉴权访问，否则模块自动降级关闭） |
+| `--speaker-db-path` | 路径 | `data/speakers.db` | 声纹库路径（相对服务根目录）；**数据永不自动清理** |
+| `--speaker-id-threshold` | 0–1 | `0.45` | 1:N 开集识别阈，最高相似度低于此判 unknown |
+| `--speaker-id-margin` | 0–1 | `0.10` | top1-top2 margin，差距小于此判 unknown（近邻打架宁缺勿错） |
+| `--speaker-enroll-min-sec` | 秒 | `3.0` | 手动登记单样本最短有效语音（VAD 后） |
+| `--speaker-auto-enroll` / `--no-speaker-auto-enroll` | - | 开启 | 离线识别未命中的说话人自动以「说话人_NN」登记（**开启 = 部署方声明已获数据主体同意**） |
+| `--speaker-auto-enroll-min-sec` | 秒 | `10.0` | 自动登记的簇最短语音总时长（严于手动登记，降低噪声建档） |
+| `--speaker-store-audio` / `--no-speaker-store-audio` | - | 关闭 | 留存登记样本音频到 `data/speaker_audio/`（扩大合规面，默认关） |
+
 ### 配置文件元参数
 
 | 参数 | 说明 |
@@ -98,7 +122,7 @@ bash start.sh --no-config
 
 - 仅支持 YAML，顶层为扁平键值映射；全部可配键见 [`asr-service/config.example.yaml`](../asr-service/config.example.yaml)。
 - **启动时硬校验**：未知键（带近似拼写提示）、空值、类型错误、取值越界、重复键均直接报错退出，防止拼写错误静默生效；多处错误一次性全部报出。
-- 布尔开关在配置文件设 `true` 后，命令行可用反向参数覆盖（`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store`）。
+- 布尔开关在配置文件设 `true` 后，命令行可用反向参数覆盖（`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-speaker-store-audio`）。
 
 ### 安全
 
@@ -132,6 +156,25 @@ enable_task_store: true
 - 历史任务的查询与删除接口见 [API 文档 · 任务持久化对 API 的影响](api/v2.md#任务持久化对-api-的影响)。
 - 只保存文本结果与元数据，**不留存音频原件**；持久化写入失败只告警，不影响任务执行。
 - 删除 `data/tasks.db` = 清空历史记录，不影响服务功能。对内容留存有更严格要求时，调小 `task_retention_days` 或关闭开关。
+
+## 说话人分离与声纹库（speakers.db）
+
+```yaml
+# config.yaml：开启分离（匿名标签）
+enable_speaker: true
+
+# 进一步开启声纹库（真名识别）——必须同时配置 api_key
+enable_speaker_db: true
+api_key: "sk-your-key"
+```
+
+### 行为说明
+
+- **分离**：单文件/单会话作用域的匿名标签 `A`/`B`/`C`…，跨任务不保证同人同标签；任何环节失败只丢标签，转写不受影响。
+- **声纹库降级矩阵**：以下任一条件不满足时模块自动降级关闭（ERROR 日志 + `/v2/speakers*` 返回 503，服务正常启动）：① `enable_speaker` 开启且引擎加载成功；② `api_key` 非空；③ 建库成功。库内模板与当前引擎 `model_tag` 不一致时仅禁用登记/识别，查看与删除保留（被遗忘权）。
+- **数据永不自动清理**：`speakers.db` 无 TTL（与 tasks.db 的 7 天清理不同）——声纹是长期积累资产，越用识别越准；唯一删除途径为 `DELETE /v2/speakers/{id}`（硬删除 + 物理回收）或删除库文件。
+- **自动登记**：开启 `identify_speakers` 的离线转写中，未命中库且语音足量（默认 ≥10s）的说话人自动登记为「说话人_NN」，在 `/web-ui/speakers` 或 `PATCH /v2/speakers/{id}` 改名后，后续转写直接显示真名；实时路径不自动登记（在线聚类漂移易重复建档）。
+- **合规**：登记接口强制 `consent=true` 双保险（接口 + 库约束）；开启自动登记即部署方声明已获数据主体同意；默认不留存音频；审计日志随库落盘。**备份 = 拷贝 `data/speakers.db` 单文件**（建议随常规备份计划），删库即彻底清除全部声纹数据。
 
 ## 内置常量（app/config.py）
 
