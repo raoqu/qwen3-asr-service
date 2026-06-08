@@ -111,6 +111,18 @@ body.dark .adv-field .lbl { color: #cbd5e1; }
 .adv-hint { font-size: .76em; color: #94a3b8; line-height: 1.55; margin: 2px 0 12px; }
 .adv-field + .sec-title { margin-top: 16px; }
 
+/* 应用栏「模型信息」卡片（chip 图标悬停弹出） */
+.model-card { min-width: 226px; }
+.model-card-title { font-size: .76em; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.model-row { display: flex; justify-content: space-between; gap: 18px; padding: 5px 0; font-size: .84em; font-variant-numeric: tabular-nums; }
+.model-row + .model-row { border-top: 1px solid rgba(148, 163, 184, .16); }
+.model-row .k { color: #64748b; white-space: nowrap; }
+body.dark .model-row .k { color: #94a3b8; }
+.model-row .v { font-weight: 600; color: #334155; text-align: right; word-break: break-all; }
+body.dark .model-row .v { color: #e2e8f0; }
+.model-row .v.on { color: var(--accent); }
+.model-row .v.off { color: #94a3b8; font-weight: 500; }
+
 .seg-row { display: flex; align-items: flex-start; gap: 14px; padding: 6px 8px 6px 0; border-radius: 8px; cursor: pointer; }
 .seg-row.static { cursor: default; }
 .seg-row:hover { background: rgba(20, 184, 166, .07); }
