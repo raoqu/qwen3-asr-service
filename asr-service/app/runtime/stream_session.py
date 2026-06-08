@@ -20,6 +20,8 @@ import numpy as np
 from app.utils.audio_resampler import pcm_bytes_to_array, resample_to_16k
 from app.utils.result_parser import extract_text, extract_words
 from app.engines.streaming_vad_engine import StreamingVADEngine
+from app.runtime.speaker_cluster import OnlineSpeakerClusterer
+import app.config as cfg
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +87,8 @@ class StreamSession:
     """单个 WS 会话：缓冲音频 → 在线 VAD 断句 → 内存离线解码 → 标点 → 产出 final 信封。"""
 
     def __init__(self, sid, svad: StreamingVADEngine, asr, punc, executor, asr_sem,
-                 *, language=None, max_segment_sec=30, enable_words=False):
+                 *, language=None, max_segment_sec=30, enable_words=False, speaker=None,
+                 speaker_service=None):
         self.sid = sid
         self._svad = svad
         self._asr = asr
@@ -94,6 +97,11 @@ class StreamSession:
         self._asr_sem = asr_sem
         self._max_segment_sec = max_segment_sec
         self._enable_words = enable_words
+        self._speaker = speaker                  # None = 说话人分离关闭
+        self._spk_cluster = None                 # configure() 时重建（会话域）
+        self._speaker_service = speaker_service  # None = 声纹库未启用
+        self._identify = False                   # start 消息 identify_speakers 开关
+        self._spk_name_cache = {}                # label -> {"name", "count", "ver"}（会话级簇缓存）
 
         self.audio_fs = _TARGET_SR
         self.language = language
@@ -123,6 +131,14 @@ class StreamSession:
         self.seg_start_ms = None
         self.buffer = AudioBuffer(sr=_TARGET_SR)
         self._frame_count = 0
+        if self._speaker is not None:
+            self._spk_cluster = OnlineSpeakerClusterer(
+                threshold=cfg.SPEAKER_THRESHOLD,
+                max_speakers=cfg.SPEAKER_MAX,
+                min_seg_ms=cfg.SPEAKER_MIN_SEG_MS,
+            )
+        self._identify = bool(cfg_msg.get("identify_speakers", False))
+        self._spk_name_cache = {}
         logger.info(f"[stream] 会话配置 sid={self.sid[:8]} audio_fs={self.audio_fs} "
                     f"language={self.language} wav={self.wav_name}")
 
@@ -221,6 +237,21 @@ class StreamSession:
                 text = await self._in_thread(self._punc.restore, text)
             except Exception as e:
                 logger.warning(f"标点恢复失败，使用原始文本: {e}")
+        # 说话人判定：CPU 任务，在 _asr_sem 之外、线程池内执行（体例同标点）
+        spk = None
+        spk_name = None
+        if self._spk_cluster is not None:
+            try:
+                emb = await self._in_thread(self._speaker.embed_segment, seg)
+                spk = self._spk_cluster.assign(emb, int(end_ms - start_ms))
+            except Exception as e:
+                logger.warning(f"说话人判定失败，本段不标注: {e}")
+            # 声纹识别（可选）：以"当时"质心查库，不回改历史（以最新 final 为准）
+            if spk is not None and self._identify and self._speaker_service is not None:
+                try:
+                    spk_name = await self._in_thread(self._lookup_speaker_name, spk)
+                except Exception as e:
+                    logger.warning(f"声纹识别失败，本段不带真名: {e}")
         logger.info(f"[stream] final#{self.seg_id} 段[{int(start_ms)},{int(end_ms)}]"
                     f"={int(end_ms - start_ms)}ms 样本={seg.size} 解码={decode_ms:.0f}ms 文本长度={len(text)}")
         msg = {
@@ -234,8 +265,38 @@ class StreamSession:
             words = extract_words(res, int(start_ms) / 1000.0)
             if words:
                 msg["words"] = words
+        if spk is not None:
+            msg["speaker"] = spk
+        if spk_name is not None:
+            msg["speaker_name"] = spk_name
         self.seg_id += 1
         yield msg
+
+    def _lookup_speaker_name(self, spk: str) -> str | None:
+        """会话级簇缓存的声纹查询（同步，线程池内执行）。
+
+        缓存失效（满足任一即重查）：
+        ① 簇质心累计段数达上次查询的 2 倍——早期 unknown 随质心稳定升级命中；
+        ② 声纹库 cache_version 变化——外部登记/改名/删除即时可见。
+        均不回改历史 final。
+        """
+        cluster = self._spk_cluster      # 本地引用：release() 并发置 None 防护
+        if cluster is None:
+            return None
+        ver = self._speaker_service.store.cache_version
+        count = max(cluster.count_of(spk), 1)
+        cached = self._spk_name_cache.get(spk)
+        if (cached is not None and cached["ver"] == ver
+                and count < cached["count"] * 2):
+            return cached["name"]
+        centroid = cluster.centroid_of(spk)
+        if centroid is None:
+            return cached["name"] if cached else None
+        mapping = self._speaker_service.map_clusters(
+            [{"label": spk, "centroid": centroid}])
+        name = mapping[0]["name"] if mapping else None
+        self._spk_name_cache[spk] = {"name": name, "count": count, "ver": ver}
+        return name
 
 
 class VadOfflineBackend:
@@ -244,11 +305,13 @@ class VadOfflineBackend:
     mode = "standard"
     backend = "vad-offline"
 
-    def __init__(self, asr, vad, punc=None, *, max_sessions=4, asr_concurrency=1,
-                 max_segment_sec=30, vad_chunk_ms=200):
+    def __init__(self, asr, vad, punc=None, *, speaker=None, speaker_service=None,
+                 max_sessions=4, asr_concurrency=1, max_segment_sec=30, vad_chunk_ms=200):
         self._svad = StreamingVADEngine(vad, chunk_ms=vad_chunk_ms)
         self._asr = asr
         self._punc = punc
+        self._speaker = speaker
+        self._speaker_service = speaker_service
         self._max_sessions = max_sessions
         self._max_segment_sec = max_segment_sec
         self._enable_words = bool(getattr(asr, "align_enabled", False))
@@ -266,6 +329,8 @@ class VadOfflineBackend:
             "partial_results": False,
             "word_timestamps": self._enable_words,
             "languages_auto": True,
+            "speaker_labels": speaker is not None,
+            "speaker_identification": speaker is not None and speaker_service is not None,
         }
 
     async def acquire(self) -> bool:
@@ -279,6 +344,7 @@ class VadOfflineBackend:
         return StreamSession(
             sid, self._svad, self._asr, self._punc, self._executor, self._asr_sem,
             max_segment_sec=self._max_segment_sec, enable_words=self._enable_words,
+            speaker=self._speaker, speaker_service=self._speaker_service,
         )
 
     def release(self, session):
@@ -286,6 +352,8 @@ class VadOfflineBackend:
             if session is not None:
                 session.buffer = None
                 session.vad_cache = None
+                session._spk_cluster = None    # 会话域语义：质心状态随会话释放
+                session._spk_name_cache = {}   # 声纹簇缓存同步清空
         finally:
             with self._count_lock:
                 self._active = max(0, self._active - 1)

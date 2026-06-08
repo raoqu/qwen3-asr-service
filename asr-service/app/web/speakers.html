@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>__DOC_TITLE__ - Qwen3-ASR Service</title>
+<title>说话人管理 - Qwen3-ASR Service</title>
 <script src="/web-ui/assets/vendor/vue-3.5.35.global.prod.js"></script>
 <script src="/web-ui/assets/vendor/naive-ui-2.44.1.prod.js"></script>
 <link rel="stylesheet" href="/web-ui/assets/app.css">
@@ -20,8 +20,8 @@
         <nav class="appnav">
           <a href="/web-ui">{{ t('nav.offline') }}</a>
           <a href="/web-ui/stream">{{ t('nav.stream') }}</a>
-          <a href="/web-ui/speakers">{{ t('nav.speakers') }}</a>
-          <a :href="docsHref" class="active">{{ t('nav.docs') }}</a>
+          <a href="/web-ui/speakers" class="active">{{ t('nav.speakers') }}</a>
+          <a :href="docsHref">{{ t('nav.docs') }}</a>
         </nav>
         <div class="appbar-right">
           <n-tooltip trigger="hover">
@@ -43,29 +43,15 @@
       </div>
     </header>
     <div class="container">
-      <div class="docs-layout">
-        <!-- v-pre：导航与正文为服务端渲染 HTML，跳过 Vue 编译（文档内容可能含 {{ }} 等模板语法示例） -->
-        <nav class="docs-sidebar" v-pre>__DOC_NAV__</nav>
-        <main class="markdown-body" v-pre>__DOC_BODY__</main>
-      </div>
+      <n-message-provider>
+        <n-dialog-provider>
+          <app-body></app-body>
+        </n-dialog-provider>
+      </n-message-provider>
     </div>
   </n-config-provider>
 </div>
 <script src="/web-ui/assets/common.js"></script>
-<script>
-(function () {
-  var C = window.AsrCommon, DOC_LANG = '__DOC_LANG__', ALT = '__DOC_ALT_SLUG__';
-  if (C.locale.value !== DOC_LANG) {
-    if (!C.langChosen() && ALT) { location.replace('/web-ui/docs/' + ALT); return; }
-    // 显式跟随页内中英链接打开的文档：界面语言同步到正文语言
-    C.setLang(DOC_LANG);
-  }
-  // 应用栏切语言 = 跳转到对应语言版本（无对侧版本时仅界面文案切换）
-  Vue.watch(C.locale, function (v) {
-    if (v !== DOC_LANG && ALT) location.href = '/web-ui/docs/' + ALT;
-  });
-  C.mountApp();
-})();
-</script>
+<script src="/web-ui/assets/speakers.js"></script>
 </body>
 </html>

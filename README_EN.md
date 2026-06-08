@@ -11,10 +11,12 @@ An out-of-the-box long-form speech recognition API service based on Qwen3-ASR, w
 - **Long Audio Support** - Audio files from 1s to 4 hours with automatic VAD segmentation
 - **Real-time Transcription** - WebSocket streaming endpoint, sentence-by-sentence results for microphone / streamed audio
 - **Async Tasks + Persistence** - Submit and poll for results; task results queryable across restarts (tasks.db)
+- **Speaker Diarization** - Offline / real-time transcripts annotated with anonymous speaker labels A/B/C… (CAM++ voiceprint model, CPU inference)
+- **Voiceprint Database** - Enrolled speakers show their real names in transcripts; unknown speakers are auto-enrolled with placeholder names, with one-click rename in the Web management page (speakers.db, authentication required)
 - **Multi-format Support** - WAV / MP3 / FLAC / M4A / AAC / OGG and more
 - **Timestamps** - Sentence-level / word-level timestamps (GPU mode)
 - **Auto Punctuation** - Integrated CT-Transformer punctuation restoration model
-- **Web UI** - Modern interface (Vue 3 + Naive UI, dark theme): offline transcription, real-time transcription, auto-refreshing task history and offline documentation center
+- **Web UI** - Modern interface (Vue 3 + Naive UI, dark theme): offline transcription, real-time transcription, speaker management, auto-refreshing task history and offline documentation center
 - **API Authentication** - Optional Bearer Token authentication
 - **Flexible Configuration** - Four priority layers: YAML config file / CLI arguments / environment variables
 - **Interactive Management** - CLI management script supporting Docker / venv dual-mode management

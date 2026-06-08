@@ -18,7 +18,7 @@ class ArgSpec:
     key: str                      # 配置文件键名（= CLI 长参数横线转下划线）
     flags: tuple                  # CLI flag（bool 型为"开启" flag）
     default: object = None        # 实义默认值（argparse 一律 SUPPRESS）
-    type: type = str              # str / int / bool（bool 走 store_true/store_false）
+    type: type = str              # str / int / float / bool（bool 走 store_true/store_false）
     choices: tuple = None
     help: str = ""
     dest: str = None              # argparse dest，缺省 = key
@@ -123,6 +123,75 @@ ARG_SPECS = (
         key="task_retention_days", flags=("--task-retention-days",), default=7, type=int,
         group="离线任务",
         help="过期任务清理窗口（天），启动时执行；0=永不清理 (default: 7)",
+    ),
+    ArgSpec(
+        key="enable_speaker", flags=("--enable-speaker",), default=False, type=bool,
+        group="说话人分离",
+        help="说话人分离：离线 segment.speaker / 实时 final.speaker（匿名 A/B/C…）",
+        negative_flags=("--no-speaker",), negative_help="关闭说话人分离（覆盖配置文件）",
+    ),
+    ArgSpec(
+        key="speaker_threshold", flags=("--speaker-threshold",), default=0.5, type=float,
+        group="说话人分离",
+        help="实时在线归簇余弦阈值，实测可用区间 [0.35, 0.65] (default: 0.5)",
+    ),
+    ArgSpec(
+        key="speaker_max", flags=("--speaker-max",), default=8, type=int,
+        group="说话人分离",
+        help="说话人数上限：实时硬上限，离线谱聚类簇数搜索上界 (default: 8)",
+    ),
+    ArgSpec(
+        key="speaker_min_seg_ms", flags=("--speaker-min-seg-ms",), default=1500, type=int,
+        group="说话人分离",
+        help="实时短段门槛（毫秒）：短于此不建新簇/不更新质心 (default: 1500)",
+    ),
+    ArgSpec(
+        key="speaker_max_windows", flags=("--speaker-max-windows",), default=4000, type=int,
+        group="说话人分离",
+        help="离线滑窗数上限，超出均匀抽稀（超长音频内存防护） (default: 4000)",
+    ),
+    ArgSpec(
+        key="enable_speaker_db", flags=("--enable-speaker-db",), default=False, type=bool,
+        group="声纹库",
+        help="声纹库（登记+真名识别）：依赖 --enable-speaker 且必须配置 api_key",
+        negative_flags=("--no-speaker-db",), negative_help="关闭声纹库（覆盖配置文件）",
+    ),
+    ArgSpec(
+        key="speaker_db_path", flags=("--speaker-db-path",), default="data/speakers.db",
+        group="声纹库",
+        help="声纹库路径，相对服务根目录；数据永不自动清理 (default: data/speakers.db)",
+    ),
+    ArgSpec(
+        key="speaker_id_threshold", flags=("--speaker-id-threshold",), default=0.45, type=float,
+        group="声纹库",
+        help="1:N 开集识别阈 τ_id，低于此为 unknown (default: 0.45)",
+    ),
+    ArgSpec(
+        key="speaker_id_margin", flags=("--speaker-id-margin",), default=0.10, type=float,
+        group="声纹库",
+        help="top1-top2 margin，差距小于此判 unknown（宁缺勿错） (default: 0.10)",
+    ),
+    ArgSpec(
+        key="speaker_enroll_min_sec", flags=("--speaker-enroll-min-sec",), default=3.0, type=float,
+        group="声纹库",
+        help="手动登记单样本最短有效语音秒数（VAD 后） (default: 3.0)",
+    ),
+    ArgSpec(
+        key="speaker_auto_enroll", flags=("--speaker-auto-enroll",), default=True, type=bool,
+        group="声纹库",
+        help="离线识别未命中的簇自动以「说话人_NN」登记（开启=部署方声明已获数据主体同意）",
+        negative_flags=("--no-speaker-auto-enroll",), negative_help="关闭自动登记（覆盖配置文件）",
+    ),
+    ArgSpec(
+        key="speaker_auto_enroll_min_sec", flags=("--speaker-auto-enroll-min-sec",),
+        default=10.0, type=float, group="声纹库",
+        help="自动登记的簇最短语音总时长秒数（严于手动登记） (default: 10.0)",
+    ),
+    ArgSpec(
+        key="speaker_store_audio", flags=("--speaker-store-audio",), default=False, type=bool,
+        group="声纹库",
+        help="留存登记样本音频到 data/speaker_audio/（扩大合规面，默认关）",
+        negative_flags=("--no-speaker-store-audio",), negative_help="不留存登记样本音频",
     ),
 )
 

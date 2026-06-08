@@ -16,6 +16,7 @@ Higher layers override lower ones for the same parameter; **explicitly passed** 
 - [Config File (config.yaml)](#config-file-configyaml)
 - [Environment Variables](#environment-variables)
 - [Offline Task Persistence (tasks.db)](#offline-task-persistence-tasksdb)
+- [Speaker Diarization & Voiceprint Database (speakers.db)](#speaker-diarization--voiceprint-database-speakersdb)
 - [Built-in Constants (app/config.py)](#built-in-constants-appconfigpy)
 
 ---
@@ -62,6 +63,29 @@ All parameters are passed through `bash start.sh <args>`. Config-file key = long
 | `--task-db-path` | Path | `data/tasks.db` | Task database path (relative to the service root) |
 | `--task-retention-days` | Days | `7` | Retention window for expired tasks, cleaned at startup; `0` = never clean |
 
+### Speaker Diarization
+
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `--enable-speaker` / `--no-speaker` | - | Disabled | Speaker diarization: offline `segments[].speaker` / real-time `final.speaker` (anonymous A/B/C…); the CAM++ model (28MB) is auto-downloaded on first use and runs on CPU without consuming VRAM |
+| `--speaker-threshold` | 0–1 | `0.5` | Online clustering cosine threshold for real-time (usable range observed at 0.35–0.65; higher splits speakers more aggressively, lower merges them more aggressively) |
+| `--speaker-max` | Number | `8` | Upper bound on speaker count (hard cap in real-time; upper bound of the cluster-count search in offline spectral clustering) |
+| `--speaker-min-seg-ms` | Milliseconds | `1500` | Real-time short-segment gate: segments shorter than this neither create a new cluster nor update a centroid (voiceprint features only stabilize at ≥1.5s) |
+| `--speaker-max-windows` | Number | `4000` | Upper bound on offline sliding windows; the excess is uniformly subsampled (memory guard for clustering very long audio) |
+
+### Voiceprint Database
+
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `--enable-speaker-db` / `--no-speaker-db` | - | Disabled | Voiceprint database (enrollment + real-name identification): requires `enable_speaker` and **must have `api_key` configured** (voiceprints are biometric data, no unauthenticated access allowed, otherwise the module automatically degrades and disables itself) |
+| `--speaker-db-path` | Path | `data/speakers.db` | Voiceprint database path (relative to the service root); **data is never auto-cleaned** |
+| `--speaker-id-threshold` | 0–1 | `0.45` | 1:N open-set identification threshold; if the highest similarity is below this, the result is `unknown` |
+| `--speaker-id-margin` | 0–1 | `0.10` | top1-top2 margin; if the gap is smaller than this, the result is `unknown` (when neighbors compete, prefer omission over error) |
+| `--speaker-enroll-min-sec` | Seconds | `3.0` | Minimum effective speech per sample for manual enrollment (after VAD) |
+| `--speaker-auto-enroll` / `--no-speaker-auto-enroll` | - | Enabled | Auto-enroll unmatched speakers from offline identification as `Speaker_NN` (**enabling auto-enroll = the deployer declares data-subject consent has been obtained**) |
+| `--speaker-auto-enroll-min-sec` | Seconds | `10.0` | Minimum total speech duration of a cluster for auto-enrollment (stricter than manual enrollment, to reduce noisy records) |
+| `--speaker-store-audio` / `--no-speaker-store-audio` | - | Disabled | Retain enrollment sample audio in `data/speaker_audio/` (widens the compliance surface, off by default) |
+
 ### Config-file Meta Parameters
 
 | Parameter | Description |
@@ -98,7 +122,7 @@ bash start.sh --no-config
 
 - YAML only, flat key-value mapping at the top level; all available keys are listed in [`asr-service/config.example.yaml`](../asr-service/config.example.yaml).
 - **Hard validation at startup**: unknown keys (with did-you-mean hints), null values, type errors, out-of-range values and duplicate keys all abort startup with readable errors — typos never take effect silently; all errors are reported at once.
-- Boolean switches set to `true` in the file can be overridden from the CLI with negative flags (`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store`).
+- Boolean switches set to `true` in the file can be overridden from the CLI with negative flags (`--no-punc` / `--no-web` / `--no-stream` / `--no-align` / `--no-task-store` / `--no-speaker` / `--no-speaker-db` / `--no-speaker-auto-enroll` / `--no-speaker-store-audio`).
 
 ### Security
 
@@ -132,6 +156,25 @@ enable_task_store: true
 - Query and deletion endpoints for historical tasks: see [API reference · How Task Persistence Affects the API](api/v2_EN.md#how-task-persistence-affects-the-api).
 - Only text results and metadata are stored — **no original audio is retained**; persistence write failures are logged as warnings and never affect task execution.
 - Deleting `data/tasks.db` = clearing history without affecting functionality. For stricter content-retention requirements, lower `task_retention_days` or turn the switch off.
+
+## Speaker Diarization & Voiceprint Database (speakers.db)
+
+```yaml
+# config.yaml: enable diarization (anonymous labels)
+enable_speaker: true
+
+# further enable the voiceprint database (real-name identification) — api_key must also be configured
+enable_speaker_db: true
+api_key: "sk-your-key"
+```
+
+### Behavior
+
+- **Diarization**: anonymous labels `A`/`B`/`C`… scoped to a single file/session; the same person is not guaranteed the same label across tasks; any failure along the way only drops the label, transcription is unaffected.
+- **Voiceprint-database degradation matrix**: if any of the following conditions is not met, the module automatically degrades and disables itself (ERROR log + `/v2/speakers*` returns 503, while the service still starts normally): ① `enable_speaker` is on and the engine loads successfully; ② `api_key` is non-empty; ③ the database is created successfully. When stored templates do not match the current engine's `model_tag`, only enrollment/identification is disabled while viewing and deletion are retained (right to be forgotten).
+- **Data is never auto-cleaned**: `speakers.db` has no TTL (unlike tasks.db's 7-day cleanup) — voiceprints are a long-term accumulating asset, and identification gets more accurate the more they are used; the only way to delete is `DELETE /v2/speakers/{id}` (hard delete + physical reclamation) or deleting the database file.
+- **Auto-enrollment**: during offline transcription with `identify_speakers` enabled, speakers that miss the database and have sufficient speech (default ≥10s) are auto-enrolled as `说话人_NN` (Chinese for "Speaker_NN"); after renaming via `/web-ui/speakers` or `PATCH /v2/speakers/{id}`, subsequent transcriptions display the real name directly; the real-time path does not auto-enroll (online clustering drift easily causes duplicate records); matched speakers never get templates auto-appended either (to prevent sample poisoning) — add samples manually via `POST /v2/speakers/{id}/templates`.
+- **Compliance**: the enrollment endpoint enforces `consent=true` as double-insurance (endpoint + database constraint); enabling auto-enrollment means the deployer declares data-subject consent has been obtained; audio is not retained by default; the audit log is persisted alongside the database. **Backup = copy the single `data/speakers.db` file** (recommend including it in your regular backup plan); deleting the database completely erases all voiceprint data.
 
 ## Built-in Constants (app/config.py)
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
 from app.web import docs_site
-from app.web.page import HTML_PAGE, STREAM_PAGE
+from app.web.page import HTML_PAGE, SPEAKERS_PAGE, STREAM_PAGE
 
 # 前端静态资源目录（vendored Vue/Naive UI + 页面 JS），由 main 挂载到 /web-ui/assets
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
@@ -22,6 +22,12 @@ async def web_ui():
 async def web_ui_stream():
     """返回实时语音转写测试页（麦克风 / 文件模拟推流）"""
     return STREAM_PAGE
+
+
+@web_router.get("/web-ui/speakers", response_class=HTMLResponse)
+async def web_ui_speakers():
+    """返回说话人管理页（声纹库：列表/改名/备注/删除；模块未启用时页内降级指引）"""
+    return SPEAKERS_PAGE
 
 
 @web_router.get("/web-ui/docs", response_class=HTMLResponse)

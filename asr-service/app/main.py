@@ -102,6 +102,28 @@ def _apply_cli_config(args):
         cfg.MAX_STREAM_SESSIONS = args.max_stream_sessions
     if getattr(args, "stream_asr_concurrency", None) is not None:
         cfg.STREAM_ASR_CONCURRENCY = args.stream_asr_concurrency
+    cfg.ENABLE_SPEAKER = getattr(args, "enable_speaker", False)
+    if getattr(args, "speaker_threshold", None) is not None:
+        cfg.SPEAKER_THRESHOLD = args.speaker_threshold
+    if getattr(args, "speaker_max", None) is not None:
+        cfg.SPEAKER_MAX = args.speaker_max
+    if getattr(args, "speaker_min_seg_ms", None) is not None:
+        cfg.SPEAKER_MIN_SEG_MS = args.speaker_min_seg_ms
+    if getattr(args, "speaker_max_windows", None) is not None:
+        cfg.SPEAKER_MAX_WINDOWS = args.speaker_max_windows
+    cfg.ENABLE_SPEAKER_DB = getattr(args, "enable_speaker_db", False)
+    if getattr(args, "speaker_db_path", None) is not None:
+        cfg.SPEAKER_DB_PATH = args.speaker_db_path
+    if getattr(args, "speaker_id_threshold", None) is not None:
+        cfg.SPEAKER_ID_THRESHOLD = args.speaker_id_threshold
+    if getattr(args, "speaker_id_margin", None) is not None:
+        cfg.SPEAKER_ID_MARGIN = args.speaker_id_margin
+    if getattr(args, "speaker_enroll_min_sec", None) is not None:
+        cfg.SPEAKER_ENROLL_MIN_SEC = args.speaker_enroll_min_sec
+    cfg.SPEAKER_AUTO_ENROLL = getattr(args, "speaker_auto_enroll", True)
+    if getattr(args, "speaker_auto_enroll_min_sec", None) is not None:
+        cfg.SPEAKER_AUTO_ENROLL_MIN_SEC = args.speaker_auto_enroll_min_sec
+    cfg.SPEAKER_STORE_AUDIO = getattr(args, "speaker_store_audio", False)
     if cfg.API_KEY:
         logger.info("API 密钥已配置，Bearer token 认证已启用")
 
@@ -208,11 +230,60 @@ def _assemble_standard(app: FastAPI, args) -> None:
             punc_engine = None
             enable_punc = False
 
+    # 说话人分离引擎（可选）：加载失败降级关闭，不影响转写主链路（容错对齐标点）
+    speaker_engine = None
+    if cfg.ENABLE_SPEAKER:
+        from app.engines.speaker_embedding_engine import SpeakerEmbeddingEngine
+        speaker_engine = SpeakerEmbeddingEngine()
+        try:
+            speaker_engine.load()
+        except Exception as e:
+            logger.warning(f"说话人引擎加载失败，已降级关闭: {e}")
+            speaker_engine = None
+    speaker_enabled = speaker_engine is not None
+
+    # 声纹库（可选）：降级矩阵按序检查，任一失败 = ERROR 日志 + 模块关闭、服务继续启动
+    speaker_service = None
+    speaker_store = None
+    speaker_tag_mismatch = False
+    if getattr(args, "enable_speaker_db", False):
+        if speaker_engine is None:                       # ① 依赖分离引擎
+            logger.error("声纹库需要 --enable-speaker 且说话人引擎加载成功，已降级关闭")
+        elif not cfg.API_KEY:                            # ② 合规硬规则
+            logger.error("声纹库要求配置 api_key（声纹属生物识别信息，"
+                         "不允许无鉴权访问），已降级关闭")
+        else:
+            from app.engines.speaker_embedding_engine import SpeakerEmbeddingEngine
+            from app.runtime.speaker_store import SpeakerStore
+            from app.runtime.speaker_service import SpeakerService
+            spk_db_path = cfg.SPEAKER_DB_PATH
+            if not os.path.isabs(spk_db_path):
+                spk_db_path = os.path.join(cfg.BASE_DIR, spk_db_path)
+            try:
+                speaker_store = SpeakerStore(
+                    spk_db_path, model_tag=SpeakerEmbeddingEngine.MODEL_TAG)
+                # ③ model_tag 失配：仅禁登记/识别（503），GET/DELETE 保留（被遗忘权）
+                speaker_tag_mismatch = not speaker_store.check_model_tag(
+                    SpeakerEmbeddingEngine.MODEL_TAG)
+                if speaker_tag_mismatch:
+                    logger.error("声纹库 model_tag 与当前引擎不一致：登记/识别已禁用，"
+                                 "管理端点保留（如需重建请删除库文件或迁移模板）")
+                speaker_service = SpeakerService(speaker_store, speaker_engine, vad_engine)
+            except Exception as e:                       # ④ 建库失败
+                logger.error(f"声纹库初始化失败，已降级关闭: {e}")
+                speaker_service = None
+                speaker_store = None
+    speaker_db_enabled = speaker_service is not None and not speaker_tag_mismatch
+    # 转写联动仅在识别可用时注入（失配 = 库内模板与当前引擎不可比，联动同样禁用）
+    linked_speaker_service = speaker_service if speaker_db_enabled else None
+
     # 创建 Pipeline
     pipeline = ASRPipeline(
         asr_engine=asr_engine,
         vad_engine=vad_engine,
         punc_engine=punc_engine,
+        speaker_engine=speaker_engine,
+        speaker_service=linked_speaker_service,
     )
 
     # 任务持久化（可选）：建库失败只告警不中断启动（附属能力不拖垮主链路）
@@ -247,6 +318,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
             language=task.get("language"),
             progress_callback=on_progress,
             cancelled=lambda: task_manager.is_stopping or task_manager.is_cancelled(task["task_id"]),
+            identify_speakers=task.get("identify_speakers", False),
         )
 
     task_manager.set_processor(process_task)
@@ -257,12 +329,15 @@ def _assemble_standard(app: FastAPI, args) -> None:
     capabilities = {
         "mode": "standard",
         "offline_api": True,
+        "speaker_labels": speaker_enabled,
+        "speaker_identification": speaker_db_enabled,
         "stream": {
             "enabled": stream_enabled,
             "backend": "vad-offline" if stream_enabled else None,
             "path": "/v2/asr/stream" if stream_enabled else None,
             "partial_results": False,
             "word_timestamps": enable_align if stream_enabled else False,
+            "speaker_labels": speaker_enabled if stream_enabled else False,
         },
     }
     service_info = {
@@ -272,6 +347,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
         "model_size": model_size,
         "align_enabled": enable_align,
         "punc_enabled": enable_punc,
+        "speaker_enabled": speaker_enabled,
+        "speaker_db_enabled": speaker_db_enabled,
         "asr_backend": asr_backend,
         "vad_backend": VADEngine.BACKEND,
         "punc_backend": PuncEngine.BACKEND if enable_punc else "disabled",
@@ -289,6 +366,14 @@ def _assemble_standard(app: FastAPI, args) -> None:
     app.include_router(build_offline_router("/v1", include_deprecated=True))
     app.include_router(build_offline_router("/v2"))
 
+    # 声纹库路由（仅 /v2）：无条件挂载——未启用/降级时端点统一 503
+    from app.api.speaker_routes import init_speaker_routes, build_speakers_router
+    init_speaker_routes(speaker_service, tag_mismatch=speaker_tag_mismatch)
+    app.include_router(build_speakers_router())
+    if speaker_db_enabled:
+        logger.info(f"声纹库已启用：/v2/speakers*（{speaker_store.speaker_count} 人，"
+                    f"自动登记={'开' if cfg.SPEAKER_AUTO_ENROLL else '关'}）")
+
     # 实时 Route B：按 --enable-stream 挂载统一端点 WS /v2/asr/stream
     stream_backend = None
     if stream_enabled:
@@ -296,6 +381,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
         from app.runtime.stream_session import VadOfflineBackend
         stream_backend = VadOfflineBackend(
             asr_engine, vad_engine, punc_engine,
+            speaker=speaker_engine,
+            speaker_service=linked_speaker_service,
             max_sessions=cfg.MAX_STREAM_SESSIONS,
             asr_concurrency=cfg.STREAM_ASR_CONCURRENCY,
             max_segment_sec=cfg.STREAM_MAX_SEGMENT_SEC,
@@ -318,6 +405,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
         worker_exited = task_manager.shutdown()
         if stream_backend is not None:
             stream_backend.shutdown()
+        if speaker_store is not None:
+            speaker_store.close()
         if task_store is not None:
             if worker_exited:
                 task_store.close()

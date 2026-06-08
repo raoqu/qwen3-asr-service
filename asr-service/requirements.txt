@@ -21,6 +21,10 @@ pyyaml
 soundfile
 librosa
 
+# 说话人分离聚类（AHC/谱聚类，CPU 轻量）
+scipy
+scikit-learn
+
 # OpenVINO（CPU 推理）
 openvino>=2024.0
 

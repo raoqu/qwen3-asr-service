@@ -30,8 +30,9 @@ A historical alias of `GET /v1/tasks/{task_id}` with identical behavior. **Marke
 ## Not Available in v1
 
 - **Real-time transcription**: `WS /v2/asr/stream` is provided in the v2 namespace only (single unified endpoint, no v1 variant). See [v2 reference · Real-time Transcription](v2_EN.md#real-time-transcription).
+- **Speaker management**: `/v2/speakers*` (voiceprint enrollment/identification/management) is provided in the v2 namespace only. See [v2 reference · Speaker Management](v2_EN.md#speaker-management). Note that because v1/v2 share the implementation, once speaker diarization / voiceprint identification is enabled, the `identify_speakers` parameter on `POST /v1/asr` and the `speaker` / `speaker_name` / `speakers` fields in offline results also take effect in v1 (additive, see below).
 
 ## Versioning Conventions
 
-- All protocol changes are additive (new optional fields/parameters); old clients can simply ignore unknown fields. Since v1/v2 share the implementation, such changes also take effect in v1 (e.g. the `history` parameter and `wav_name` field added by task persistence).
-- Brand-new capabilities (such as the real-time endpoint) land in the v2 namespace only; v1 gains no new endpoints.
+- All protocol changes are additive (new optional fields/parameters); old clients can simply ignore unknown fields. Since v1/v2 share the implementation, such changes also take effect in v1 (e.g. the `history` parameter and `wav_name` field added by task persistence, or the `segments[].speaker` and related fields added by speaker diarization).
+- Brand-new capabilities (such as the real-time endpoint and the speaker management endpoints) land in the v2 namespace only; v1 gains no new endpoints.

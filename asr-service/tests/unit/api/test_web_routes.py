@@ -21,7 +21,7 @@ def test_web_ui_offline_page():
     html = resp.text
     assert "<!DOCTYPE html>" in html
     assert "/web-ui/stream" in html                       # 导航指向实时页
-    assert "/web-ui/docs" in html                         # 导航指向文档中心
+    assert ':href="docsHref"' in html                     # 文档导航随语言指向对应版本（i18n）
     assert 'id="app"' in html                             # Vue 挂载点
     # vendor 与页面脚本引用
     assert "vue-3.5.35.global.prod.js" in html
@@ -49,3 +49,20 @@ def test_stream_page_loaded_from_disk():
     # page.py 应已成功读入 stream.html（非空）
     from app.web.page import STREAM_PAGE
     assert STREAM_PAGE and len(STREAM_PAGE) > 500
+
+
+def test_web_ui_speakers_page():
+    resp = _client().get("/web-ui/speakers")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "<!DOCTYPE html>" in html
+    assert 'id="app"' in html
+    assert "/web-ui/assets/speakers.js" in html
+    assert "/web-ui/assets/common.js" in html
+
+
+def test_speakers_nav_present_on_all_pages():
+    # appbar 各页入口可达（V5 验收项）
+    c = _client()
+    for path in ("/web-ui", "/web-ui/stream", "/web-ui/speakers"):
+        assert "/web-ui/speakers" in c.get(path).text
