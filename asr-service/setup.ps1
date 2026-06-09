@@ -77,13 +77,9 @@ function Initialize-Venv {
     $pyVer = & $sysPython -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
     Write-Host "[INFO] Detected system Python version: $pyVer" -ForegroundColor Cyan
 
-    $verParts = $pyVer -split '\.'
-    $major = [int]$verParts[0]
-    $minor = [int]$verParts[1]
-
-    if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 10)) {
+    if ($pyVer -ne '3.12') {
         Write-Host
-        Write-Host "[ERROR] Current Python version is $pyVer, but 3.10+ is required" -ForegroundColor Red
+        Write-Host "[ERROR] Current Python version is $pyVer, but 3.12 is required" -ForegroundColor Red
         Write-Host '[ERROR] Please download Python 3.12: https://www.python.org/downloads/release/python-31213/' -ForegroundColor Red
         Write-Host '[ERROR] Or use the portable package method - re-run setup.ps1 and select option 1' -ForegroundColor Red
         Read-Host 'Press Enter to exit'
