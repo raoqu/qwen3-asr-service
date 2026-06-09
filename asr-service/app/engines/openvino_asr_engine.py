@@ -103,7 +103,7 @@ class OpenVINOASREngine:
         language: str | None = None,
     ) -> list[dict]:
         """
-        对音频执行 ASR 识别。
+        对音频文件执行 ASR 识别。
 
         返回:
             [{"text": str}]
@@ -111,10 +111,34 @@ class OpenVINOASREngine:
         if self._processor is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
 
-        # 1. 读取音频
         audio, sr = sf.read(audio_path, dtype="float32")
+        return self.transcribe_array(audio, sr, language)
+
+    def transcribe_array(
+        self,
+        audio,
+        sr: int = 16000,
+        language: str | None = None,
+    ) -> list[dict]:
+        """对内存音频数组执行 ASR 识别（实时逐句解码，不落盘）。
+
+        与 QwenASREngine.transcribe_array 接口一致，供流式会话使用。
+
+        参数:
+            audio: np.ndarray（float32，单声道，16kHz）
+            sr: 采样率（OpenVINO 预处理仅支持 16kHz）
+            language: 语言（可选）
+
+        返回:
+            [{"text": str}]
+        """
+        if self._processor is None:
+            raise RuntimeError("ASR 模型未加载，请先调用 load()")
         if sr != 16000:
             raise ValueError(f"音频采样率必须为 16kHz，当前为 {sr}Hz")
+
+        # 1. 归一化为单声道 float32
+        audio = np.asarray(audio, dtype="float32")
         if audio.ndim > 1:
             audio = audio.mean(axis=1)
 
