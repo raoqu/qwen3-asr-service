@@ -30,6 +30,7 @@
       'cap.flag.speaker_identification': '声纹识别', 'cap.flag.noise_filter_tunable': '降噪可调',
       'cap.flag.speaker_tunable': '说话人可调', 'cap.flag.endpoint_tunable': '断句可调',
       'cap.flag.output_toggles': '输出可控',
+      'cap.tip.partial_results': '需 vLLM 模式才支持（当前 vad-offline 后端按段输出，不产增量结果）',
       // 诊断指标
       'diag.sent': '发送速率', 'diag.recv': '接收速率', 'diag.buf': '发送缓冲',
       'diag.frame': '最大帧', 'diag.stall': '渲染延迟',
@@ -38,6 +39,7 @@
       // 输入源面板
       'panel.input': '输入源', 'input.langPlaceholder': '语言（默认 auto，如 zh / en）',
       'input.identify': '声纹识别（真名标注）',
+      'input.appendMode': '追加输出（保留上次结果，分隔续写）',
       // 高级设置（随 start 消息按会话覆盖）
       'adv.title': '高级设置（可选覆盖）',
       'adv.hint': '留空＝用服务端默认；关闭开关＝本次会话不执行该步骤。会话进行中不可改。',
@@ -68,7 +70,7 @@
       'err.concurrencyFull': '并发会话已满（1013）。',
       'err.notReady': '实时端点未就绪：请用 --serve-mode standard --enable-stream 启动服务。',
       // 转写结果
-      'panel.result': '转写结果', 'result.waiting': '等待音频输入…', 'result.words': '({0} 词)',
+      'panel.result': '转写结果', 'result.waiting': '等待音频输入…', 'result.words': '({0} 词)', 'result.divider': '新一段',
       // 协议日志
       'log.title': '协议日志', 'log.clear': '清空', 'log.empty': '（暂无消息）',
     },
@@ -88,12 +90,14 @@
       'cap.flag.speaker_identification': 'Speaker ID', 'cap.flag.noise_filter_tunable': 'Denoise tunable',
       'cap.flag.speaker_tunable': 'Speaker tunable', 'cap.flag.endpoint_tunable': 'Endpoint tunable',
       'cap.flag.output_toggles': 'Output toggles',
+      'cap.tip.partial_results': 'Requires vLLM mode (the current vad-offline backend emits per segment, not incrementally)',
       'diag.sent': 'Send rate', 'diag.recv': 'Recv rate', 'diag.buf': 'Send buffer',
       'diag.frame': 'Max frame', 'diag.stall': 'Render lag',
       'diag.unit.frame': 'fr/s', 'diag.unit.msg': 'msg/s', 'diag.unit.kb': 'KB',
       'diag.unit.sample': 'samples', 'diag.unit.ms': 'ms',
       'panel.input': 'Input source', 'input.langPlaceholder': 'Language (default auto, e.g. zh / en)',
       'input.identify': 'Speaker identification (label real names)',
+      'input.appendMode': 'Append output (keep previous results, continue after a divider)',
       'adv.title': 'Advanced (optional overrides)',
       'adv.hint': 'Empty = server default; turning a switch off skips that step. Locked while a session is active.',
       'adv.farfield': 'Far-field denoise', 'adv.noiseFilter': 'Segment denoise gate', 'adv.energyFloor': 'Energy gate (dBFS)', 'adv.snrMin': 'SNR gate (dB)',
@@ -119,7 +123,7 @@
       'err.authFailed': 'Authentication failed: please check the API Key.',
       'err.concurrencyFull': 'Concurrent sessions are full (1013).',
       'err.notReady': 'Live endpoint not ready: start the service with --serve-mode standard --enable-stream.',
-      'panel.result': 'Transcription', 'result.waiting': 'Waiting for audio input…', 'result.words': '({0} words)',
+      'panel.result': 'Transcription', 'result.waiting': 'Waiting for audio input…', 'result.words': '({0} words)', 'result.divider': 'New session',
       'log.title': 'Protocol log', 'log.clear': 'Clear', 'log.empty': '(no messages)',
     },
   };
@@ -209,6 +213,7 @@
         'speaker_labels', 'speaker_identification',
         'noise_filter_tunable', 'speaker_tunable', 'endpoint_tunable', 'output_toggles',
       ];
+      const CAP_TIP_KEYS = new Set(['partial_results']);   // 带「为何不可用」说明的能力：hover 弹 tooltip
       const capFlags = computed(() => {
         const c = capParts.value && capParts.value.capabilities;
         if (!c) return [];
@@ -216,13 +221,14 @@
         const extra = Object.keys(c).filter(k => !CAP_ORDER.includes(k));
         // 已启用排前：成排亮色芯片更易扫读，禁用项弱化随后（sort 稳定，组内保持 CAP_ORDER）
         return known.concat(extra)
-          .map(k => ({ key: k, label: t('cap.flag.' + k), on: !!c[k] }))
+          .map(k => ({ key: k, label: t('cap.flag.' + k), on: !!c[k], tip: CAP_TIP_KEYS.has(k) ? t('cap.tip.' + k) : '' }))
           .sort((a, b) => Number(b.on) - Number(a.on));
       });
 
       // —— 结果 ——
       const finals = reactive([]);        // {key, start, text, words, speaker, speakerName}
       const partial = ref('');
+      const appendMode = ref(false);      // 追加输出：开始新会话时不清空结果，插分隔线续写
       let finalSeq = 0;
       function appendFinal(m) {
         finals.push({ key: ++finalSeq, start: m.start, text: m.text || '', words: (m.words && m.words.length) || 0, speaker: m.speaker || null, speakerName: m.speaker_name || null });
@@ -340,7 +346,13 @@
       function openWs(onReady) {
         hint.value = '';
         warn.value = '';
-        clearResults();
+        // 追加输出：保留上次结果并插入分隔线续写；否则照常清空
+        if (appendMode.value && finals.length) {
+          partial.value = '';
+          finals.push({ key: ++finalSeq, divider: true });
+        } else {
+          clearResults();
+        }
         pushedBytes = 0; pushStartTs = 0; procEndMs = 0;   // 流控状态按会话重置
         const t = apiKey.value.trim();
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -655,7 +667,7 @@
 
       return {
         t,
-        lang, canIdentify, identifySpeakers, srv, adv, warn, ph,
+        lang, canIdentify, identifySpeakers, appendMode, srv, adv, warn, ph,
         streamState, statusText, busy, source,
         capWarning, hint, capParts, capFlags, diag, vuRef,
         finals, partial, fmtMs, transcriptRef, spkIdx,
@@ -689,6 +701,9 @@
               <n-input v-model:value="lang" size="small" :placeholder="t('input.langPlaceholder')" style="margin-bottom:12px;"></n-input>
               <n-checkbox v-if="canIdentify" v-model:checked="identifySpeakers" size="small" :disabled="busy || !adv.diarize" style="margin-bottom:12px;">
                 {{ t('input.identify') }}
+              </n-checkbox>
+              <n-checkbox v-model:checked="appendMode" size="small" :disabled="busy" style="margin-bottom:12px;">
+                {{ t('input.appendMode') }}
               </n-checkbox>
               <n-collapse style="margin-bottom:12px;">
                 <n-collapse-item :title="t('adv.title')" name="adv">
@@ -793,7 +808,10 @@
               <template v-if="capFlags.length">
                 <div class="sess-caps-label">{{ t('cap.capabilities') }}</div>
                 <div class="sess-caps">
-                  <span v-for="f in capFlags" :key="f.key" class="cap-chip" :class="f.on ? 'on' : 'off'">{{ f.label }}</span>
+                  <n-tooltip v-for="f in capFlags" :key="f.key" trigger="hover" :disabled="!f.tip">
+                    <template #trigger><span class="cap-chip" :class="[f.on ? 'on' : 'off', { 'has-tip': f.tip }]">{{ f.label }}</span></template>
+                    {{ f.tip }}
+                  </n-tooltip>
                 </div>
               </template>
             </n-card>
@@ -804,10 +822,13 @@
               <template #header><span class="panel-title"><a-icon name="doc" size="15"></a-icon>{{ t('panel.result') }}</span></template>
               <div id="transcript" ref="transcriptRef">
                 <n-empty v-if="!finals.length && !partial" :description="t('result.waiting')" size="small" style="margin:24px 0;"></n-empty>
-                <div v-for="line in finals" :key="line.key" class="transcript-line">
-                  <span class="t">{{ line.start != null ? fmtMs(line.start) : '' }}</span>
-                  <span class="tx"><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
-                </div>
+                <template v-for="line in finals" :key="line.key">
+                  <div v-if="line.divider" class="transcript-divider"><span>{{ t('result.divider') }}</span></div>
+                  <div v-else class="transcript-line">
+                    <span class="t">{{ line.start != null ? fmtMs(line.start) : '' }}</span>
+                    <span class="tx"><span v-if="line.speaker" class="speaker-badge" :class="'spk-' + spkIdx(line.speaker)">{{ line.speakerName || line.speaker }}</span>{{ line.text }}<n-text v-if="line.words" depth="3" style="font-size:.78em;"> {{ t('result.words', line.words) }}</n-text></span>
+                  </div>
+                </template>
                 <div v-if="partial" class="partial-line">{{ partial }}<span class="cursor-blk"></span></div>
               </div>
             </n-card>
