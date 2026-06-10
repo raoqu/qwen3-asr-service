@@ -64,6 +64,7 @@ docker run -d --gpus all -p 8765:8765 \
 | [API Reference v1 (legacy)](docs/api/v1_EN.md) | Legacy-client compatibility notes and versioning conventions |
 | [Compatibility APIs](docs/api/compat_EN.md) | OpenAI / Alibaba Cloud DashScope drop-in compatibility (offline + realtime), just change base_url |
 | [Architecture](docs/architecture_EN.md) | Project structure, processing pipeline, key design decisions |
+| [Development Guide](docs/development_EN.md) | Dev environment, testing, E2E smoke, single-schema / docs / compat-layer conventions |
 
 ---
 

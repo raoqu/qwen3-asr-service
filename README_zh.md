@@ -64,6 +64,7 @@ docker run -d --gpus all -p 8765:8765 \
 | [API 文档 v1（兼容）](docs/api/v1.md) | 旧客户端兼容说明与版本演进约定 |
 | [兼容接口](docs/api/compat.md) | OpenAI / 阿里云 DashScope drop-in 兼容（离线 + 实时），改 base_url 即接入 |
 | [架构说明](docs/architecture.md) | 项目结构、处理流程、关键设计 |
+| [开发指南](docs/development.md) | 开发环境、测试、端到端冒烟、单一 schema / 文档 / 兼容层扩展约定 |
 
 ---
 
