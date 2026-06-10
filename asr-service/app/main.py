@@ -132,6 +132,9 @@ def _apply_cli_config(args):
     if getattr(args, "speaker_auto_enroll_min_sec", None) is not None:
         cfg.SPEAKER_AUTO_ENROLL_MIN_SEC = args.speaker_auto_enroll_min_sec
     cfg.SPEAKER_STORE_AUDIO = getattr(args, "speaker_store_audio", False)
+    cfg.ENABLE_OPENAI_API = getattr(args, "enable_openai_api", False)
+    if getattr(args, "openai_sync_timeout", None) is not None:
+        cfg.OPENAI_SYNC_TIMEOUT = args.openai_sync_timeout
     if cfg.API_KEY:
         logger.info("API 密钥已配置，Bearer token 认证已启用")
 
@@ -434,6 +437,17 @@ def _assemble_standard(app: FastAPI, args) -> None:
         init_ws_stream(stream_backend)
         app.include_router(ws_router_stream)
         logger.info("实时转写已启用：WS /v2/asr/stream（路线B / vad-offline）")
+
+    # 兼容接口（/compat/*）：可选挂载，与 v1/v2 完全隔离（错误信封按异常类型分派）
+    if getattr(args, "enable_openai_api", False):
+        from app.api.compat import init_compat
+        from app.api.compat.errors import register_compat_exception_handlers
+        from app.api.compat.openai_routes import build_openai_router
+        init_compat(task_manager=task_manager, task_store=task_store,
+                    backend=stream_backend, service_info=service_info)
+        register_compat_exception_handlers(app)
+        app.include_router(build_openai_router())
+        logger.info("OpenAI 兼容接口已启用：/compat/openai/v1/*")
 
     # 条件挂载 Web UI
     if getattr(args, "web", False):

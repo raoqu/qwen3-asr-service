@@ -49,6 +49,9 @@ LEGACY_DEFAULTS = {
     "speaker_auto_enroll": True,
     "speaker_auto_enroll_min_sec": 10.0,
     "speaker_store_audio": False,
+    # ── 兼容接口（/compat/*）新增，非重构前遗留 ──
+    "enable_openai_api": False,
+    "openai_sync_timeout": 300,
 }
 
 

@@ -106,6 +106,11 @@ TASK_TIMEOUT = 1800             # 单任务超时 30 分钟（秒）
 TASK_RESULT_TTL = 3600          # 已完成任务保留时长（秒），默认 1 小时
 TASK_CLEANUP_INTERVAL = 300     # 清理扫描间隔（秒），默认 5 分钟
 
+# ─── 兼容接口（/compat/*）───
+
+ENABLE_OPENAI_API = False        # 挂载 OpenAI 兼容接口 /compat/openai/v1/*
+OPENAI_SYNC_TIMEOUT = 300        # OpenAI 同步转写等待上限（秒），超时返回 504
+
 # ─── serve-mode ───
 
 SERVE_MODE = "standard"         # "standard" | "vllm"（由 main.py argparse 覆盖）

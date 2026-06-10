@@ -215,6 +215,17 @@ ARG_SPECS = (
         help="留存登记样本音频到 data/speaker_audio/（扩大合规面，默认关）",
         negative_flags=("--no-speaker-store-audio",), negative_help="不留存登记样本音频",
     ),
+    ArgSpec(
+        key="enable_openai_api", flags=("--enable-openai-api",), default=False, type=bool,
+        group="兼容接口",
+        help="启用 OpenAI 兼容接口 /compat/openai/v1/*（drop-in 对接 OpenAI SDK）",
+        negative_flags=("--no-openai-api",), negative_help="关闭 OpenAI 兼容接口（覆盖配置文件）",
+    ),
+    ArgSpec(
+        key="openai_sync_timeout", flags=("--openai-sync-timeout",), default=300, type=int,
+        group="兼容接口",
+        help="OpenAI 同步转写等待上限，单位秒；超时返回 504 (default: 300)",
+    ),
 )
 
 
