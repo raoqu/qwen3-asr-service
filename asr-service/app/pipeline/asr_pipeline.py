@@ -2,11 +2,11 @@ import os
 import shutil
 import logging
 import soundfile as sf
-import numpy as np
 
 from app.engines.vad_engine import VADEngine
 from app.engines.punc_engine import PuncEngine
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
+from app.utils.result_parser import extract_text, extract_words
 from app.config import (
     UPLOADS_DIR,
     AUDIO_CHUNKS_DIR,
@@ -24,10 +24,14 @@ class ASRPipeline:
         asr_engine,
         vad_engine: VADEngine,
         punc_engine: PuncEngine | None = None,
+        speaker_engine=None,
+        speaker_service=None,
     ):
         self.asr = asr_engine
         self.vad = vad_engine
         self.punc = punc_engine
+        self.speaker = speaker_engine
+        self.speaker_service = speaker_service    # 声纹库联动（None = 未启用）
 
     def run(
         self,
@@ -36,6 +40,8 @@ class ASRPipeline:
         language: str | None = None,
         progress_callback=None,
         cancelled=None,
+        identify_speakers: bool = False,
+        options: dict | None = None,
     ) -> dict:
         """
         执行完整 ASR Pipeline。
@@ -46,11 +52,36 @@ class ASRPipeline:
         2. 超长 segment 二次切分
         3. ASR 识别
         4. 标点恢复（可选）
+        4.5 说话人分离（可选，进度 0.90→0.95）
         5. 合并结果，回算绝对时间戳
         6. 清理临时文件
         """
         wav_path = None
         chunk_dir = os.path.join(AUDIO_CHUNKS_DIR, task_id)
+
+        # 按请求覆盖（缺省=服务端默认）；降级开关只能关、不能开启未加载模型
+        opts = options or {}
+        with_punc = opts.get("with_punc", True)
+        with_words = opts.get("with_words", True)
+        diarize = opts.get("diarize", True)
+        max_segment = opts.get("max_segment")            # None → cfg
+        id_threshold = opts.get("speaker_id_threshold")
+        id_margin = opts.get("speaker_id_margin")
+        # 合法但功能未启用的参数 → 软提示（不报错），随 result 返回
+        warnings = []
+        if opts.get("with_punc") is True and self.punc is None:
+            warnings.append("with_punc")
+        if opts.get("with_words") is True and not self.asr.align_enabled:
+            warnings.append("with_words")
+        if opts.get("diarize") is True and self.speaker is None:
+            warnings.append("diarize")
+        # 声纹识别真正能跑的前提：声纹库 + 说话人引擎 + diarize 同时就位（diarize 关时
+        # 不聚类，identify/id 阈值全部失效）——任一缺失即软提示，避免静默丢弃
+        spk_id_ready = self.speaker_service is not None and self.speaker is not None and diarize
+        if identify_speakers and not spk_id_ready:
+            warnings.append("identify_speakers")
+        if (id_threshold is not None or id_margin is not None) and not spk_id_ready:
+            warnings.append("speaker_id_threshold/margin")
 
         try:
             os.makedirs(chunk_dir, exist_ok=True)
@@ -80,16 +111,22 @@ class ASRPipeline:
 
             if not vad_segments:
                 logger.info(f"VAD 未检测到语音段: {audio_path}")
-                return {
+                result = {
                     "segments": [],
                     "full_text": "",
                     "language": language,
                     "align_enabled": self.asr.align_enabled,
                     "punc_enabled": self.punc is not None,
                 }
+                if self.speaker is not None and diarize:
+                    result["speakers"] = []
+                if warnings:
+                    result["warnings"] = warnings
+                return result
 
             # 2. 合并相邻 VAD 段 + 切分写入 chunk 文件
-            chunks = self._split_segments_to_chunks(wav_path, vad_segments, chunk_dir)
+            chunks = self._split_segments_to_chunks(
+                wav_path, vad_segments, chunk_dir, max_segment)
             total_chunks = len(chunks)
             logger.info(f"[Pipeline] 切片完成: {len(vad_segments)} 个 VAD 段 -> {total_chunks} 个 chunk")
 
@@ -106,8 +143,13 @@ class ASRPipeline:
                     chunks, total_chunks, language, cancelled, progress_callback,
                 )
 
+            # 词级时间戳降级：请求 with_words=false 时剥离 ASR 已产出的 words
+            if not with_words:
+                for seg in segments:
+                    seg.pop("words", None)
+
             # 4. 标点恢复（可选）
-            if self.punc:
+            if self.punc and with_punc:
                 punc_count = 0
                 for seg in segments:
                     if seg["text"] and seg["text"] != "[识别失败]":
@@ -120,6 +162,41 @@ class ASRPipeline:
                             logger.warning(f"标点恢复失败，使用原始文本: {e}")
                 logger.info(f"[Pipeline] 标点恢复完成: {punc_count}/{len(segments)} 个段落有变化")
 
+            # 4.5 说话人分离（可选；容错对齐标点：失败只丢标签，不破坏转写）
+            speakers_result = None
+            if self.speaker is not None and diarize and segments and not (cancelled and cancelled()):
+                if progress_callback:
+                    progress_callback(0.90)
+                diar = None
+                try:
+                    diar = self._run_diarization(wav_path, vad_segments)
+                    for seg in segments:
+                        label = diar.label_for(seg["start"], seg["end"])
+                        if label is not None:
+                            seg["speaker"] = label
+                    speakers_result = diar.labels_in_order
+                    logger.info(
+                        f"[Pipeline] 说话人分离完成: {len(speakers_result)} 人 "
+                        f"{speakers_result}"
+                    )
+                except Exception as e:
+                    logger.warning(f"说话人分离失败，跳过: {e}")
+                # 4.6 声纹识别 + 自动登记（可选）：speakers 升级为带 speaker_id/name 的
+                # 映射表；map_and_enroll_clusters 永不抛错（失败退回匿名）
+                if identify_speakers and self.speaker_service is not None and diar is not None:
+                    mapping = self.speaker_service.map_and_enroll_clusters(
+                        diar.clusters, id_threshold=id_threshold, id_margin=id_margin)
+                    name_of = {m["label"]: m for m in mapping}
+                    for seg in segments:
+                        m = name_of.get(seg.get("speaker"))
+                        if m and m.get("name"):
+                            seg["speaker_name"] = m["name"]
+                    speakers_result = mapping
+                    named = sum(1 for m in mapping if m.get("name"))
+                    logger.info(f"[Pipeline] 声纹识别完成: {named}/{len(mapping)} 簇有名")
+                if progress_callback:
+                    progress_callback(0.95)
+
             # 5. 合并全文
             full_text = "".join(
                 seg["text"] for seg in segments
@@ -129,13 +206,18 @@ class ASRPipeline:
             if progress_callback:
                 progress_callback(1.0)
 
-            return {
+            result = {
                 "segments": segments,
                 "full_text": full_text,
                 "language": language,
                 "align_enabled": self.asr.align_enabled,
                 "punc_enabled": self.punc is not None,
             }
+            if speakers_result is not None:
+                result["speakers"] = speakers_result
+            if warnings:
+                result["warnings"] = warnings
+            return result
 
         finally:
             # 6. 清理临时文件
@@ -273,19 +355,46 @@ class ASRPipeline:
                 progress_callback(0.1 + 0.8 * (i + 1) / total_chunks)
         return segments
 
+    def _run_diarization(self, wav_path: str, vad_segments: list[tuple[int, int]]):
+        """说话人分离：原始 VAD 段（合并前）滑窗 → embedding → 全局聚类。
+
+        返回 DiarizationResult（label_for 投票 + clusters 衔接面，声纹库 V 系列用）。
+        延迟导入：speaker 关闭时本模块零额外依赖。
+        """
+        from app.engines.speaker_embedding_engine import make_windows
+        from app.runtime.speaker_cluster import DiarizationResult, cluster_offline
+
+        windows: list[tuple[float, float]] = []
+        for start_ms, end_ms in vad_segments:
+            windows.extend(make_windows(start_ms / 1000.0, end_ms / 1000.0))
+        if not windows:
+            return DiarizationResult([], [], [])
+
+        # 窗数上限抽稀：规避超长音频谱聚类 N² 亲和阵内存
+        if len(windows) > cfg.SPEAKER_MAX_WINDOWS:
+            k = -(-len(windows) // cfg.SPEAKER_MAX_WINDOWS)
+            windows = windows[::k]
+            logger.info(f"[Pipeline] 说话人滑窗抽稀: 每 {k} 取 1 → {len(windows)} 窗")
+
+        wav, _sr = sf.read(wav_path, dtype="float32")  # 阶段 0 已保证 16k 单声道
+        embeddings = self.speaker.embed_windows(wav, windows)
+        labels = cluster_offline(embeddings, max_speakers=cfg.SPEAKER_MAX)
+        return DiarizationResult(windows, labels, embeddings)
+
     def _merge_vad_segments(
         self,
         vad_segments: list[tuple[int, int]],
+        max_segment_sec: float | None = None,
     ) -> list[tuple[int, int]]:
         """
         贪心合并相邻 VAD 段：从第一段开始，持续追加后续段，
-        直到合并后总跨度（首段 start 到末段 end）超过 cfg.MAX_SEGMENT_DURATION，
+        直到合并后总跨度（首段 start 到末段 end）超过 max_segment_sec（缺省=cfg），
         则切出一组，开始新的一组。保留段间静音以维持时间戳准确性。
         """
         if not vad_segments:
             return []
 
-        max_span_ms = int(cfg.MAX_SEGMENT_DURATION * 1000)
+        max_span_ms = int((max_segment_sec or cfg.MAX_SEGMENT_DURATION) * 1000)
         merged = []
         group_start, group_end = vad_segments[0]
 
@@ -305,20 +414,21 @@ class ASRPipeline:
         wav_path: str,
         vad_segments: list[tuple[int, int]],
         chunk_dir: str,
+        max_segment_sec: float | None = None,
     ) -> list[dict]:
         """
-        合并相邻 VAD 段后切分音频，超长段二次切分。
+        合并相邻 VAD 段后切分音频，超长段二次切分。max_segment_sec 缺省=cfg。
 
         返回:
             [{"path": str, "offset_sec": float, "duration_sec": float}, ...]
         """
         data, sr = sf.read(wav_path)
+        eff_max = max_segment_sec or cfg.MAX_SEGMENT_DURATION
 
         # 先合并碎片段
-        merged = self._merge_vad_segments(vad_segments)
+        merged = self._merge_vad_segments(vad_segments, eff_max)
         logger.info(
-            f"VAD 段合并: {len(vad_segments)} -> {len(merged)} "
-            f"(阈值={cfg.MAX_SEGMENT_DURATION}s)"
+            f"VAD 段合并: {len(vad_segments)} -> {len(merged)} (阈值={eff_max}s)"
         )
 
         chunks = []
@@ -330,7 +440,7 @@ class ASRPipeline:
             segment_data = data[start_sample:end_sample]
             segment_duration = len(segment_data) / sr
 
-            if segment_duration <= cfg.MAX_SEGMENT_DURATION:
+            if segment_duration <= eff_max:
                 chunk_path = os.path.join(chunk_dir, f"chunk_{idx:04d}.wav")
                 sf.write(chunk_path, segment_data, sr)
                 chunks.append({
@@ -341,7 +451,7 @@ class ASRPipeline:
                 idx += 1
             else:
                 # 单段超长（理论上合并后不会出现，但作为兜底）
-                sub_samples = int(cfg.MAX_SEGMENT_DURATION * sr)
+                sub_samples = int(eff_max * sr)
                 offset = 0
                 while offset < len(segment_data):
                     end = min(offset + sub_samples, len(segment_data))
@@ -361,44 +471,12 @@ class ASRPipeline:
         return chunks
 
     def _extract_text(self, results) -> str:
-        """从 qwen_asr transcribe 结果中提取纯文本"""
-        if not results:
-            return ""
-        if isinstance(results, str):
-            return results
-        if isinstance(results, list):
-            texts = []
-            for item in results:
-                if hasattr(item, "text"):
-                    texts.append(item.text)
-                elif isinstance(item, dict):
-                    texts.append(item.get("text", ""))
-                elif isinstance(item, str):
-                    texts.append(item)
-            return "".join(texts)
-        if hasattr(results, "text"):
-            return results.text
-        return str(results)
+        """从 qwen_asr transcribe 结果中提取纯文本（委托共享实现）"""
+        return extract_text(results)
 
     def _extract_words(self, results, offset_sec: float) -> list[dict] | None:
-        """从 qwen_asr 结果中提取单词级时间戳（带偏移修正）"""
-        if not results or not isinstance(results, list):
-            return None
-
-        words = []
-        for item in results:
-            # ASRTranscription.time_stamps -> ForcedAlignResult.items -> [ForcedAlignItem]
-            ts = getattr(item, "time_stamps", None)
-            if ts is None:
-                continue
-            align_items = getattr(ts, "items", [])
-            for w in align_items:
-                words.append({
-                    "text": w.text,
-                    "start": round(w.start_time + offset_sec, 3),
-                    "end": round(w.end_time + offset_sec, 3),
-                })
-        return words if words else None
+        """从 qwen_asr 结果中提取单词级时间戳（委托共享实现）"""
+        return extract_words(results, offset_sec)
 
     def _cleanup(self, original_path: str, wav_path: str | None, chunk_dir: str):
         """清理临时文件"""

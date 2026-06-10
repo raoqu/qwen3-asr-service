@@ -1,0 +1,65 @@
+# Qwen3-ASR Service 配置文件
+#
+# 首次启动时若无 config.yaml，将自动由本文件（config.example.yaml）拷贝生成 config.yaml；
+# 删除 config.yaml 后重启 = 重置为本文件的默认配置。
+# 优先级：命令行显式参数 > 本文件 > 环境变量 > 内置默认值；--no-config 可完全跳过本文件。
+# 注意：真实配置 config.yaml 可能含 api_key，已加入 .gitignore 请勿提交，建议 chmod 600 config.yaml。
+
+serve_mode: standard        # standard | vllm（vllm 为 Phase 3 占位，暂未实现，仅提供 /health /capabilities）
+device: auto                # auto | cuda | cpu（auto 自动检测：有 GPU 用 cuda，否则回退 cpu）
+model_size: 0.6b            # 0.6b | 1.7b（删除本行 = 按显存自动选择）
+enable_align: false         # 词级时间戳对齐模型（需要时打开；CPU 模式不支持）
+use_punc: false             # 标点恢复
+model_source: modelscope    # modelscope | huggingface
+
+host: 127.0.0.1
+port: 8765
+web: true                   # /web-ui 演示页
+api_key: ""                 # 留空 = 不鉴权（本行会覆盖 ASR_API_KEY 环境变量；想用环境变量请删除本行）
+max_segment: 5              # VAD 切片合并最大时长（秒）
+# max_queue_size: 100       # 任务队列最大长度
+
+# ── 实时转写 ──
+enable_stream: true         # WS /v2/asr/stream（standard 模式）
+# max_stream_sessions: 16   # 实时最大并发会话数
+# stream_asr_concurrency: 1 # 实时 ASR 解码并发上限（模型层有推理锁，>1 无收益）
+
+# ── 智能远场过滤（减少远场/环境音误触发，默认关）──
+# vad_speech_noise_thres: 0.6     # FSMN-VAD 语音/噪声阈值（离线+实时统一）；0.6=默认，调高更激进，建议 0.6–0.8
+# 取消下面三行注释即开启「实时段级」过滤（推荐起步值；仅作用于实时，不影响离线）：
+# stream_noise_filter: true       # 段级能量/SNR 门控总开关
+# stream_energy_floor_dbfs: -50.0 # 绝对能量门（dBFS，满量程参考）：段响度低于此丢弃
+# stream_snr_min_db: 6.0          # 自适应信噪比门（dB）：段相对环境底噪不足此值丢弃；<=0 关闭该门
+
+# ── 离线任务持久化 ──
+enable_task_store: true     # 任务结果跨重启可查（data/tasks.db）；重启时未完成任务标记为失败
+# task_db_path: data/tasks.db
+# task_retention_days: 7    # 过期任务清理窗口（天，启动时执行；0 = 永不清理）
+
+# ── 说话人分离 ──
+enable_speaker: false       # 离线 segment.speaker / 实时 final.speaker（匿名 A/B/C…；CPU 推理，模型 28MB 首次自动下载）
+# speaker_threshold: 0.5    # 实时在线归簇余弦阈值（实测可用区间 0.35–0.65）
+# speaker_max: 8            # 说话人数上限（实时硬上限；离线谱聚类簇数搜索上界）
+# speaker_min_seg_ms: 1500  # 实时短段门槛（毫秒）：短于此不建新簇/不更新质心
+# speaker_max_windows: 4000 # 离线滑窗数上限（超长音频抽稀）
+
+# ── 声纹库（登记 + 真名识别）──
+enable_speaker_db: false    # 依赖 enable_speaker 且必须配置 api_key（声纹属生物识别信息）；数据永不自动清理
+# speaker_db_path: data/speakers.db
+# speaker_id_threshold: 0.45      # 1:N 开集识别阈 τ_id（低于此为 unknown）
+# speaker_id_margin: 0.10         # top1-top2 margin（近邻打架判 unknown，宁缺勿错）
+# speaker_enroll_min_sec: 3.0     # 手动登记单样本最短有效语音（VAD 后，秒）
+# speaker_auto_enroll: true       # 离线识别未命中簇自动以「说话人_NN」登记（开启=部署方声明已获数据主体同意）
+# speaker_auto_enroll_min_sec: 10.0  # 自动登记的簇最短语音总时长（秒）
+# speaker_store_audio: false      # 留存登记样本音频（扩大合规面）
+
+# ── 兼容接口（/compat/*，drop-in 对接 OpenAI/DashScope 客户端，默认关）──
+# 实时 WS 兼容（OpenAI Realtime / DashScope Paraformer realtime）随对应开关 + enable_stream 自动挂载；
+# 当前后端（路线B）只产整句结果，不产逐字增量（partial_results=false）。
+enable_openai_api: false    # 挂载 OpenAI 兼容接口 /compat/openai/v1/*（转写/翻译占位/模型清单 + 实时）
+# openai_sync_timeout: 300  # OpenAI 同步转写等待上限（秒），超时返回 504
+enable_dashscope_api: false # 挂载 DashScope 兼容接口 /compat/dashscope/api/v1/*（录音文件识别：提交→轮询→二跳）
+# compat_fetch_max_mb: 100        # DashScope file_urls 下载大小上限 MB（默认同 max_audio_file_size）
+# compat_fetch_timeout: 120       # file_urls 下载整体超时（秒）
+# compat_fetch_allow_private: false # 允许下载私网/回环地址（SSRF 默认禁止；仅内网可信环境放开）
+# compat_external_base_url: ""     # 回链外部基址（反代/容器，如 https://asr.example.com；默认按请求推导）

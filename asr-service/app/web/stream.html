@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实时转写 - Qwen3-ASR Service</title>
+<script src="/web-ui/assets/vendor/vue-3.5.35.global.prod.js"></script>
+<script src="/web-ui/assets/vendor/naive-ui-2.44.1.prod.js"></script>
+<link rel="stylesheet" href="/web-ui/assets/app.css">
+</head>
+<body class="app-fullh">
+<div id="app">
+  <n-config-provider :theme="theme" :theme-overrides="themeOverrides" :locale="naiveLocale" :date-locale="naiveDateLocale">
+    <n-global-style></n-global-style>
+    <header class="appbar">
+      <div class="appbar-inner">
+        <a class="brand" href="/web-ui">
+          <a-icon name="logo" size="20"></a-icon><span>Qwen3-ASR</span>
+        </a>
+        <nav class="appnav">
+          <a href="/web-ui">{{ t('nav.offline') }}</a>
+          <a href="/web-ui/stream" class="active">{{ t('nav.stream') }}</a>
+          <a href="/web-ui/speakers">{{ t('nav.speakers') }}</a>
+          <a :href="docsHref">{{ t('nav.docs') }}</a>
+        </nav>
+        <div class="appbar-right">
+          <n-popover trigger="hover" placement="bottom-end">
+            <template #trigger>
+              <button class="iconbtn svc-host" :class="svc.cls" :title="t('model.title')">
+                <a-icon name="chip"></a-icon><span class="svc-badge"></span>
+              </button>
+            </template>
+            <div class="model-card">
+              <div class="model-card-title">{{ t('model.title') }}</div>
+              <div class="svc-line" :class="svc.cls"><span class="svc-badge"></span><span>{{ svcState }}</span></div>
+              <template v-if="modelRows.length">
+                <div v-for="r in modelRows" :key="r.label" class="model-row">
+                  <span class="k">{{ r.label }}</span><span class="v" :class="r.cls">{{ r.value }}</span>
+                </div>
+              </template>
+              <n-text v-else depth="3" style="font-size:.82em;">{{ t('model.unavailable') }}</n-text>
+            </div>
+          </n-popover>
+          <span class="appbar-sep"></span>
+          <n-popover trigger="click" placement="bottom-end">
+            <template #trigger>
+              <button class="iconbtn" :class="{ 'has-key': hasKey }" title="API Key"><a-icon name="key"></a-icon></button>
+            </template>
+            <div style="width:240px;">
+              <n-text depth="3" style="display:block;font-size:.78em;margin-bottom:6px;">{{ t('key.hint') }}</n-text>
+              <n-input v-model:value="apiKey" type="password" show-password-on="click" size="small" placeholder="sk-..."></n-input>
+            </div>
+          </n-popover>
+          <button class="iconbtn lang-btn" :title="t('lang.title')" @click="toggleLang">{{ locale === 'zh' ? '中' : 'EN' }}</button>
+          <button class="iconbtn" :title="themeLabel" @click="cycleTheme"><a-icon :name="themeIcon"></a-icon></button>
+        </div>
+      </div>
+    </header>
+    <div class="container">
+      <n-message-provider>
+        <app-body></app-body>
+      </n-message-provider>
+    </div>
+  </n-config-provider>
+</div>
+<script src="/web-ui/assets/common.js"></script>
+<script src="/web-ui/assets/stream.js"></script>
+</body>
+</html>
