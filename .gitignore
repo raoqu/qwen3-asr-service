@@ -154,3 +154,4 @@ asr-service/logs
 .coverage.*
 htmlcov/
 .pytest_cache/
+.codegraph
