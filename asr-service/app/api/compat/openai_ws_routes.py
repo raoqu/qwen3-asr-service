@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket
 
-from app.api.compat.mappers import final_to_openai_completed
+from app.api.compat.mappers import final_to_openai_completed, to_engine_language
 from app.api.compat.ws_bridge import run_compat_ws
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,9 @@ def _map_session_update(obj: dict) -> dict:
     cfg_msg = {}
     # OpenAI Realtime pcm16 惯例 24kHz；客户端未声明 rate 时按此默认（本服务内部重采样到 16k）
     cfg_msg["audio_fs"] = rate if rate is not None else 24000
-    if lang is not None:
-        cfg_msg["language"] = lang
+    engine_lang = to_engine_language(lang)
+    if engine_lang is not None:
+        cfg_msg["language"] = engine_lang
     return cfg_msg
 
 

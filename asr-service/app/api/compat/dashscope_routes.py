@@ -22,7 +22,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import app.config as cfg
 from app.api.compat.errors import DashScopeCompatError
 from app.api.compat.fetch import FetchError, _safe_remove, fetch_to_local
-from app.api.compat.mappers import result_to_dashscope_transcript, v2status_to_dashscope
+from app.api.compat.mappers import (
+    result_to_dashscope_transcript, to_engine_language, v2status_to_dashscope)
 from app.api.compat.schemas import DashScopeSubmitRequest
 from app.api.routes import api_key_matches
 
@@ -163,7 +164,8 @@ async def create_transcription(body: DashScopeSubmitRequest, request: Request,
             400, f"file_urls 数量超过上限 {MAX_FILE_URLS}", code="InvalidParameter")
 
     params = body.parameters
-    language = params.language_hints[0] if params and params.language_hints else None
+    language = to_engine_language(
+        params.language_hints[0] if params and params.language_hints else None)
     options = {}
     if params:
         if params.diarization_enabled is not None:

@@ -18,7 +18,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 import app.config as cfg
 from app.api.compat.errors import OpenAICompatError
-from app.api.compat.mappers import result_to_openai, result_to_openai_sse_events
+from app.api.compat.mappers import (
+    result_to_openai, result_to_openai_sse_events, to_engine_language)
 from app.api.routes import ALLOWED_EXTENSIONS, UPLOAD_CHUNK_SIZE, api_key_matches
 from app.config import MAX_AUDIO_FILE_SIZE, UPLOADS_DIR
 
@@ -105,7 +106,7 @@ async def create_transcription(
     path = await _save_upload(file)
     try:
         task_id = _task_manager.submit(
-            file_path=path, language=language, wav_name=file.filename,
+            file_path=path, language=to_engine_language(language), wav_name=file.filename,
             options={"with_words": want_word_ts})
     except queue.Full:
         os.remove(path)

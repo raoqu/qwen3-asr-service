@@ -3,12 +3,15 @@
 覆盖：json/text/verbose_json/srt/vtt；占位字段；duration=max(end)；word 粒度开关；
 空 segments；时间戳格式（秒 → HH:MM:SS,mmm / .mmm，跨分跨时、四舍五入边界）。
 """
+import pytest
+
 from app.api.compat.mappers import (
     _fmt_timestamp,
     result_to_openai,
     result_to_openai_sse_events,
     result_to_srt,
     result_to_vtt,
+    to_engine_language,
 )
 
 RESULT = {
@@ -22,6 +25,28 @@ RESULT = {
     "full_text": "你好世界",
     "language": "zh",
 }
+
+
+# ─── to_engine_language（上游 ISO 码 → Qwen 规范名）───
+
+@pytest.mark.parametrize("code,expected", [
+    ("zh", "Chinese"),          # 纯 ISO 码
+    ("en", "English"),
+    ("yue", "Cantonese"),
+    ("Zh", "Chinese"),          # 大小写不敏感
+    ("Chinese", "Chinese"),     # 已是规范名直通
+    ("english", "English"),     # 规范名小写也认
+    ("zh-CN", "Chinese"),       # 带地区子标签取主标签
+    ("en_US", "English"),
+    ("tl", "Filipino"),         # 别名映射
+    (None, None),               # 缺省 → 自动检测
+    ("", None),                 # 空串 → 自动检测
+    ("   ", None),              # 纯空白 → 自动检测
+    ("sw", None),               # 未支持语言 → 自动检测，不击穿引擎
+    ("klingon", None),          # 非法码 → 自动检测
+])
+def test_to_engine_language(code, expected):
+    assert to_engine_language(code) == expected
 
 
 # ─── _fmt_timestamp ───

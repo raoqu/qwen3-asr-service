@@ -157,6 +157,7 @@ def check_openai_json(args):
             model="whisper-1", file=f, language="zh", response_format="json")
     text = getattr(r, "text", None)
     assert text is not None, "json 响应缺 text 字段"
+    assert text.strip(), "转写文本为空（language 未生效 / 识别失败？）"
     return f"text[:20]={text[:20]!r}"
 
 
@@ -168,6 +169,7 @@ def check_openai_verbose(args):
             response_format="verbose_json", timestamp_granularities=["word", "segment"])
     assert hasattr(r, "segments"), "verbose_json 缺 segments"
     assert r.duration is not None, "verbose_json 缺 duration"
+    assert (r.text or "").strip(), "转写文本为空（language 未生效 / 识别失败？）"
     return f"segments={len(r.segments or [])} duration={r.duration}"
 
 
@@ -338,7 +340,9 @@ def check_openai_realtime(args, pcm, sr):
     except ImportError:
         raise Skip("缺 websockets")
     transcripts = asyncio.run(_openai_realtime(args, pcm, sr))
-    return f"completed×{len(transcripts)} 首句={(transcripts[0][:16] if transcripts else '∅')!r}"
+    assert transcripts, "未收到任何 completed（language 未生效 / 实时链路异常？）"
+    assert transcripts[0].strip(), "首句 transcript 为空"
+    return f"completed×{len(transcripts)} 首句={transcripts[0][:16]!r}"
 
 
 def check_dashscope_realtime(args, pcm, sr):
@@ -347,7 +351,9 @@ def check_dashscope_realtime(args, pcm, sr):
     except ImportError:
         raise Skip("缺 websockets")
     sentences = asyncio.run(_dashscope_realtime(args, pcm, sr))
-    return f"result-generated×{len(sentences)} 首句={(sentences[0][:16] if sentences else '∅')!r}"
+    assert sentences, "未收到任何 result-generated（language 未生效 / 实时链路异常？）"
+    assert sentences[0].strip(), "首句 result 为空"
+    return f"result-generated×{len(sentences)} 首句={sentences[0][:16]!r}"
 
 
 # ═══════════════════ 主流程 ═══════════════════

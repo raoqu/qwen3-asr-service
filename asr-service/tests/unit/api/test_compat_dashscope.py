@@ -208,7 +208,7 @@ def test_diarization_and_speaker_count_handling(ds_client):
             params={"language_hints": ["en"], "diarization_enabled": True, "speaker_count": 3})
     opts = tm.submitted[0]["options"]
     assert opts == {"diarize": True}          # speaker_count 被忽略，不进 options
-    assert tm.submitted[0]["language"] == "en"
+    assert tm.submitted[0]["language"] == "English"   # ISO 码 en 归一为 Qwen 规范名
 
 
 # ─── external base url / forwarded ───

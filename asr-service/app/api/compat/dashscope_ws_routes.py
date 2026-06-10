@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket
 
-from app.api.compat.mappers import final_to_dashscope_result
+from app.api.compat.mappers import final_to_dashscope_result, to_engine_language
 from app.api.compat.ws_bridge import run_compat_ws
 
 logger = logging.getLogger(__name__)
@@ -23,8 +23,9 @@ def _map_run_task(obj: dict) -> dict:
     if params.get("sample_rate") is not None:
         cfg_msg["audio_fs"] = params["sample_rate"]
     hints = params.get("language_hints")
-    if hints:
-        cfg_msg["language"] = hints[0]
+    engine_lang = to_engine_language(hints[0] if hints else None)
+    if engine_lang is not None:
+        cfg_msg["language"] = engine_lang
     return cfg_msg
 
 
