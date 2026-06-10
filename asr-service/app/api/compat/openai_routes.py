@@ -7,18 +7,19 @@ prompt/temperature→忽略+日志、stream→400，绝不伪造。
 """
 import asyncio
 import hmac
+import json
 import logging
 import os
 import queue
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 import app.config as cfg
 from app.api.compat.errors import OpenAICompatError
-from app.api.compat.mappers import result_to_openai
+from app.api.compat.mappers import result_to_openai, result_to_openai_sse_events
 from app.api.routes import ALLOWED_EXTENSIONS, UPLOAD_CHUNK_SIZE
 from app.config import MAX_AUDIO_FILE_SIZE, UPLOADS_DIR
 
@@ -98,10 +99,6 @@ async def create_transcription(
         raise OpenAICompatError(
             400, f"Invalid value for 'response_format': {response_format}",
             param="response_format", code="invalid_value")
-    if stream:
-        # SSE 流式（Phase 3 Stage A）未实现前显式报错，不静默按非流式返回（SDK 会以 SSE 解析）
-        raise OpenAICompatError(
-            400, "stream=true is not supported yet", param="stream", code="unsupported")
 
     ignored = [p for p, v in (("prompt", prompt), ("temperature", temperature)) if v is not None]
     if ignored:
@@ -129,12 +126,25 @@ async def create_transcription(
         msg = task.get("error") or f"Transcription {status}"
         raise OpenAICompatError(500, msg, err_type="server_error", code="internal_error")
 
+    result = task.get("result") or {}
+    if stream:
+        # stream=true → SSE：整段解码后分句吐 delta，末尾 done（response_format 此时不适用）
+        return StreamingResponse(
+            _sse_events(result_to_openai_sse_events(result)),
+            media_type="text/event-stream")
+
     rendered = result_to_openai(
-        task.get("result") or {}, response_format=response_format,
+        result, response_format=response_format,
         want_word_ts=want_word_ts, language=language)
     if isinstance(rendered, str):
         return PlainTextResponse(rendered)
     return rendered
+
+
+async def _sse_events(events):
+    """SSE 编码：每事件一行 `data: <json>`，事件间空行分隔。"""
+    for ev in events:
+        yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
 
 
 async def create_translation(

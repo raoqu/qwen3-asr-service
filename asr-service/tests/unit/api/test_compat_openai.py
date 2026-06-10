@@ -153,11 +153,15 @@ def test_invalid_response_format_400(openai_client):
     assert err["code"] == "invalid_value" and err["param"] == "response_format"
 
 
-def test_stream_true_400_unsupported(openai_client):
+def test_stream_true_returns_sse(openai_client):
     client = openai_client(task_manager=FakeTM())
     r = _post(client, data={"stream": "true"})
-    assert r.status_code == 400
-    assert r.json()["error"]["code"] == "unsupported"
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/event-stream")
+    body = r.text
+    assert "transcript.text.delta" in body
+    assert "transcript.text.done" in body
+    assert "你好世界" in body          # done 携带全文（非 ASCII 不转义）
 
 
 def test_timeout_504(openai_client):

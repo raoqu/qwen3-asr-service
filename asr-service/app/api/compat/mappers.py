@@ -91,6 +91,25 @@ def result_to_openai(result: dict, *, response_format: str,
     return out
 
 
+def result_to_openai_sse_events(result: dict) -> list[dict]:
+    """result → OpenAI 转写 SSE 事件序列（按句 delta + 末尾 done）。
+
+    stream=true 的 HTTP SSE 是**单段上传的流式返回**：本服务整段解码后分句吐字，
+    delta 文本是最终结果的分块（无时间戳，不涉及增量伪造），末尾 done 携带全文。
+    """
+    segments = result.get("segments") or []
+    full = result.get("full_text", "")
+    events: list[dict] = []
+    for seg in segments:
+        text = seg.get("text", "")
+        if text:
+            events.append({"type": "transcript.text.delta", "delta": text})
+    if not events and full:
+        events.append({"type": "transcript.text.delta", "delta": full})
+    events.append({"type": "transcript.text.done", "text": full})
+    return events
+
+
 def result_to_srt(segments: list[dict]) -> str:
     """segments → SRT 字幕（时间轴 HH:MM:SS,mmm，序号从 1）。"""
     lines: list[str] = []

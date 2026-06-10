@@ -54,7 +54,7 @@ def _get_template() -> str | None:
 _NAV_ORDER = [
     "readme", "deployment", "configuration",
     "api/v2", "api/v2/basics", "api/v2/transcription", "api/v2/tasks", "api/v2/speakers",
-    "api/v1", "architecture",
+    "api/v1", "api/compat", "architecture",
 ]
 _NAV_TITLES = {
     "readme": ("项目主页", "Home"),
@@ -66,6 +66,7 @@ _NAV_TITLES = {
     "api/v2/tasks": ("任务管理", "Task Management"),
     "api/v2/speakers": ("说话人管理", "Speaker Management"),
     "api/v1": ("API v1（兼容）", "API v1 (legacy)"),
+    "api/compat": ("兼容接口", "Compatibility"),
     "architecture": ("架构说明", "Architecture"),
 }
 

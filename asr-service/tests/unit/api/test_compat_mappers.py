@@ -6,6 +6,7 @@
 from app.api.compat.mappers import (
     _fmt_timestamp,
     result_to_openai,
+    result_to_openai_sse_events,
     result_to_srt,
     result_to_vtt,
 )
@@ -135,3 +136,27 @@ def test_srt_empty_segments():
 
 def test_vtt_empty_segments():
     assert result_to_vtt([]) == "WEBVTT\n"
+
+
+# ─── SSE 事件（stream=true）───
+
+def test_sse_events_per_segment_delta_then_done():
+    events = result_to_openai_sse_events(RESULT)
+    assert events == [
+        {"type": "transcript.text.delta", "delta": "你好"},
+        {"type": "transcript.text.delta", "delta": "世界"},
+        {"type": "transcript.text.done", "text": "你好世界"},
+    ]
+
+
+def test_sse_events_no_segments_falls_back_to_full_text():
+    events = result_to_openai_sse_events({"segments": [], "full_text": "整段文本"})
+    assert events == [
+        {"type": "transcript.text.delta", "delta": "整段文本"},
+        {"type": "transcript.text.done", "text": "整段文本"},
+    ]
+
+
+def test_sse_events_empty_result_only_done():
+    events = result_to_openai_sse_events({"segments": [], "full_text": ""})
+    assert events == [{"type": "transcript.text.done", "text": ""}]
