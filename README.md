@@ -1,5 +1,12 @@
 # Qwen3-ASR Service
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![GitHub stars](https://img.shields.io/github/stars/LanceLRQ/qwen3-asr-service?style=flat-square&logo=github)](https://github.com/LanceLRQ/qwen3-asr-service/stargazers)
+[![Docker Pulls](https://img.shields.io/docker/pulls/lancelrq/qwen3-asr-service?style=flat-square&logo=docker)](https://hub.docker.com/r/lancelrq/qwen3-asr-service)
+[![Docker Image Size](https://img.shields.io/docker/image-size/lancelrq/qwen3-asr-service/latest?style=flat-square&logo=docker)](https://hub.docker.com/r/lancelrq/qwen3-asr-service)
+[![Powered by Qwen3-ASR](https://img.shields.io/badge/Powered%20by-Qwen3--ASR-ff6a00?style=flat-square)](https://github.com/QwenLM)
+
 [中文](README_zh.md) | **English**
 
 A simple, fast and efficient speech recognition API service based on Qwen3-ASR. Out-of-the-box, with offline long-form and real-time streaming transcription in one, speaker diarization / voiceprint identification, and a feature-rich, polished Web UI. Cross-platform on Linux / macOS / Windows with Docker container deployment, and dual-mode inference on GPU (CUDA) and CPU (OpenVINO INT8).

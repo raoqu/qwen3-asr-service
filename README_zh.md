@@ -1,5 +1,12 @@
 # Qwen3-ASR Service
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![GitHub stars](https://img.shields.io/github/stars/LanceLRQ/qwen3-asr-service?style=flat-square&logo=github)](https://github.com/LanceLRQ/qwen3-asr-service/stargazers)
+[![Docker Pulls](https://img.shields.io/docker/pulls/lancelrq/qwen3-asr-service?style=flat-square&logo=docker)](https://hub.docker.com/r/lancelrq/qwen3-asr-service)
+[![Docker Image Size](https://img.shields.io/docker/image-size/lancelrq/qwen3-asr-service/latest?style=flat-square&logo=docker)](https://hub.docker.com/r/lancelrq/qwen3-asr-service)
+[![Powered by Qwen3-ASR](https://img.shields.io/badge/Powered%20by-Qwen3--ASR-ff6a00?style=flat-square)](https://github.com/QwenLM)
+
 **中文** | [English](README.md)
 
 基于 Qwen3-ASR 的简单、快速、高效语音识别 API 服务。开箱即用，离线长音频与实时流式转写一体，支持说话人分离 / 声纹库识别，并提供多功能、美观实用的 Web UI。Linux / macOS / Windows 多平台兼容，支持 Docker 容器部署，支持 GPU（CUDA）和 CPU（OpenVINO INT8）双模式推理。
