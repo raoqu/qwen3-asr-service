@@ -177,6 +177,29 @@ bash docker/build.sh   # 选择 "4) vLLM"
 
 > vLLM 引擎在独立 EngineCore 子进程持有 GPU，服务固定单 worker（容器内 PID 1 收割子进程）。模型用 HF 全精度 `models/asr/0.6b`/`1.7b`（与 standard 共用 `models/` 挂载）。
 
+#### vLLM 启动日志说明（常见现象，非故障）
+
+vLLM 模式启动/退出时，日志里会出现两条看似报错、实则**无害**的信息，可放心忽略：
+
+1. **`ERROR … repo_utils.py … Error retrieving safetensors: Repo id must be in the form …`（会重试 2 次）**
+   vLLM 推断模型精度时，对**本地模型目录**有一处上游怪癖：未先判本地路径，就把绝对路径当成 HF 仓库名去查 safetensors 元数据，被仓库名格式校验拒绝。该异常被 vLLM 内部捕获后即回落到从模型配置读取精度，**模型仍按 bfloat16 正常加载**，对功能与显存均无影响。`HF_HUB_OFFLINE=1` 也压不掉这条日志（格式校验发生在离线判断之前），无需理会。
+
+2. **退出（`Ctrl+C` / `docker stop`）时 `Engine core proc EngineCore_DP0 died unexpectedly`**
+   vLLM 把 CUDA 上下文放在独立 `EngineCore` 子进程，关闭时子进程随主进程退出，client 监控线程据此打印此行——是**正常的关闭现象**，不是崩溃。
+
+**判断服务是否真正就绪**，以下面两个信号为准（而非有无上述 ERROR）：
+
+```
+INFO: Application startup complete.
+INFO: Uvicorn running on http://<host>:<port>
+```
+
+```bash
+curl http://127.0.0.1:8765/v2/health   # 返回 {"status":"ready","mode":"vllm",...} 即就绪
+```
+
+> 模型加载（torch.compile + 权重）约需数十秒，请等到上述 `Uvicorn running` 再判断，勿在加载途中误判失败。本地（非容器）`Ctrl+C` 退出后，若 `nvidia-smi` 显存未回落，说明 `EngineCore` 子进程残留，执行 `pkill -KILL -f EngineCore` 清理即可（容器部署由 PID 1 自动收割，无需手动处理）。
+
 ### 本地构建镜像
 
 ```bash

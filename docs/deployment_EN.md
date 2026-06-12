@@ -177,6 +177,29 @@ bash docker/build.sh   # choose "4) vLLM"
 
 > The vLLM engine holds the GPU in a separate EngineCore subprocess and the service runs a single worker (PID 1 reaps the subprocess in the container). It loads HF full-precision `models/asr/0.6b`/`1.7b` (shares the `models/` mount with standard).
 
+#### vLLM Startup Logs (expected, not failures)
+
+On startup/shutdown the vLLM service prints two lines that look like errors but are **harmless** — safe to ignore:
+
+1. **`ERROR … repo_utils.py … Error retrieving safetensors: Repo id must be in the form …` (retries twice)**
+   While inferring the model dtype, vLLM has an upstream quirk for **local model directories**: instead of detecting the local path first, it passes the absolute path to the HF Hub as a repo id, which the repo-id format validator rejects. The exception is caught internally and the dtype falls back to the model config, so the **model still loads as bfloat16** — no impact on functionality or VRAM. `HF_HUB_OFFLINE=1` does not suppress this line (the format check runs before the offline check). Ignore it.
+
+2. **On exit (`Ctrl+C` / `docker stop`): `Engine core proc EngineCore_DP0 died unexpectedly`**
+   vLLM keeps the CUDA context in a separate `EngineCore` subprocess; on shutdown it exits together with the main process, and the client's monitor thread prints this line — a **normal shutdown event**, not a crash.
+
+**To confirm the service is actually ready**, rely on these two signals (not on the presence/absence of the ERROR above):
+
+```
+INFO: Application startup complete.
+INFO: Uvicorn running on http://<host>:<port>
+```
+
+```bash
+curl http://127.0.0.1:8765/v2/health   # ready when it returns {"status":"ready","mode":"vllm",...}
+```
+
+> Model loading (torch.compile + weights) takes tens of seconds; wait for `Uvicorn running` before judging — don't mistake the loading phase for a failure. For local (non-container) runs, if VRAM doesn't drop after `Ctrl+C`, an `EngineCore` subprocess lingers — clear it with `pkill -KILL -f EngineCore` (container deployments reap it automatically via PID 1).
+
 ### Build Image Locally
 
 ```bash
