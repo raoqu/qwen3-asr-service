@@ -17,6 +17,7 @@
 - [环境变量](#环境变量)
 - [离线任务持久化（tasks.db）](#离线任务持久化tasksdb)
 - [说话人分离与声纹库（speakers.db）](#说话人分离与声纹库speakersdb)
+- [vLLM 原生流式模式（路线 A）](#vllm-原生流式模式路线-a)
 - [内置常量（app/config.py）](#内置常量appconfigpy)
 
 ---
@@ -96,6 +97,19 @@
 | `--speaker-auto-enroll` / `--no-speaker-auto-enroll` | - | 开启 | 离线识别未命中的说话人自动以「说话人_NN」登记（**开启 = 部署方声明已获数据主体同意**） |
 | `--speaker-auto-enroll-min-sec` | 秒 | `10.0` | 自动登记的簇最短语音总时长（严于手动登记，降低噪声建档） |
 | `--speaker-store-audio` / `--no-speaker-store-audio` | - | 关闭 | 留存登记样本音频到 `data/speaker_audio/`（扩大合规面，默认关） |
+
+### vLLM 原生流式（仅 `--serve-mode vllm`）
+
+仅 vllm 模式生效；要求 CUDA GPU，须独立环境/镜像（见下方 [vLLM 原生流式模式](#vllm-原生流式模式路线-a)）。
+
+| 参数 | 取值 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--gpu-memory-utilization` | 0–1 | `0.8` | vLLM 显存占用率（×总显存为预算；实占略低） |
+| `--vllm-max-model-len` | 数字 | 模型默认(65536) | 最大上下文长度，下调省 KV cache 显存 |
+| `--vllm-chunk-size-sec` | 浮点 | `1.0` | 流式解码块大小（秒），越小 partial 越细腻（范围 0.5–5） |
+| `--vllm-max-utterance-sec` | 数字 | `20` | 单句兜底切分（秒），约束上下文/显存增长 |
+| `--vllm-concurrency` | 数字 | `1` | 同时解码会话数（generate 串行，>1 无吞吐收益） |
+| `--vllm-end-silence-ms` | 毫秒 | `800` | 能量端点尾静音判停阈值 |
 
 ### 配置文件元参数
 
@@ -198,6 +212,39 @@ api_key: "sk-your-key"
 - **数据永不自动清理**：`speakers.db` 无 TTL（与 tasks.db 的 7 天清理不同）——声纹是长期积累资产，越用识别越准；唯一删除途径为 `DELETE /v2/speakers/{id}`（硬删除 + 物理回收）或删除库文件。
 - **自动登记**：开启 `identify_speakers` 的离线转写中，未命中库且语音足量（默认 ≥10s）的说话人自动登记为「说话人_NN」，在 `/web-ui/speakers` 或 `PATCH /v2/speakers/{id}` 改名后，后续转写直接显示真名；实时路径不自动登记（在线聚类漂移易重复建档）；已命中库的说话人也不会自动追加模板（防样本投毒），补充样本需手动调用 `POST /v2/speakers/{id}/templates`。
 - **合规**：登记接口强制 `consent=true` 双保险（接口 + 库约束）；开启自动登记即部署方声明已获数据主体同意；默认不留存音频；审计日志随库落盘。**备份 = 拷贝 `data/speakers.db` 单文件**（建议随常规备份计划），删库即彻底清除全部声纹数据。
+
+## vLLM 原生流式模式（路线 A）
+
+`--serve-mode vllm` 启用 vLLM 原生流式引擎，提供**逐句渐进（partial→final）**的实时转写；与默认 `standard` 模式（路线 B：在线 VAD + 离线解码，按句 final）**互斥启动**。
+
+**能力差异**
+
+| 维度 | standard（默认） | vllm |
+|------|-----------------|------|
+| 接口 | 离线 v1/v2 + 实时 WS（`--enable-stream`） | **仅实时 WS `/v2/asr/stream`** + `/health` + `/capabilities` |
+| 增量结果 | 无（按段 final） | **有 partial→final** |
+| 词级时间戳 / 说话人 | 支持 | 不支持 |
+| 设备 | GPU / CPU | **仅 CUDA GPU** |
+| 吞吐 | 多会话并发 | 单流串行（generate 串行，吞吐 ≈ standard） |
+| 依赖 / 镜像 | funasr + OpenVINO… | 独立 vLLM 环境（不含 funasr/OpenVINO），独立镜像 |
+
+**为何独立环境**：vLLM 强绑定特定 torch/CUDA（与 standard 的 torch 不可共存），故须独立 `venv-vllm` 或独立镜像（`docker/Dockerfile.vllm`，基于 vLLM 官方镜像派生）。详见[部署文档](deployment.md)。
+
+**启动**
+
+```bash
+# 本地（独立 venv-vllm，仅装 requirements-vllm.txt）
+asr-service/venv-vllm/bin/python -m app.main --serve-mode vllm --model-size 0.6b --web
+
+# Docker（独立镜像，独立端口 8766）
+docker compose -f docker/docker-compose.vllm.yml up -d
+```
+
+**注意**
+
+- **进程模型**：vLLM 引擎在独立 EngineCore 子进程持有 GPU；服务**固定单 worker**（uvicorn 默认 workers=1，禁用多 worker，否则各 worker 重复加载模型必爆显存）。
+- **优雅停止**：进程退出时 EngineCore 子进程可能不随父进程立即回收，Docker 中由容器停止统一收割；手动运行建议 `pkill -f "serve-mode vllm"` 后以 `nvidia-smi` 确认显存释放。
+- **模型**：加载 HF 全精度 `models/asr/0.6b` 或 `1.7b`（非 OpenVINO 量化变体）；Web 演示页（`--web` → `/web-ui/stream`）已内置 partial→final 实时渲染。
 
 ## 内置常量（app/config.py）
 

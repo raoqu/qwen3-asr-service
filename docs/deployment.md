@@ -160,6 +160,23 @@ docker compose -f docker/docker-compose.yml down
 
 `docker/docker-compose.yml` 中可配置启动参数、API 密钥、端口映射等，详见文件内注释。CPU 版编排见 `docker/docker-compose.cpu.yml`。
 
+### vLLM 原生流式镜像（独立）
+
+vLLM 模式（路线 A，逐句 partial→final 渐进流式）为 **GPU 专用的独立镜像**，基于 vLLM 官方镜像 `vllm/vllm-openai` 派生，不与默认镜像合并——standard 用户不下载 vLLM 重型 CUDA kernels，vllm 用户不下载 OpenVINO/funasr。能力差异与参数见 [配置文档：vLLM 原生流式模式](configuration.md#vllm-原生流式模式路线-a)。
+
+```bash
+# 启动（独立端口 8766，与 standard asr 8765 并存）
+docker compose -f docker/docker-compose.vllm.yml up -d
+
+# 停止
+docker compose -f docker/docker-compose.vllm.yml down
+
+# 本地构建 vLLM 镜像（build.sh 选项 4）
+bash docker/build.sh   # 选择 "4) vLLM"
+```
+
+> vLLM 引擎在独立 EngineCore 子进程持有 GPU，服务固定单 worker（容器内 PID 1 收割子进程）。模型用 HF 全精度 `models/asr/0.6b`/`1.7b`（与 standard 共用 `models/` 挂载）。
+
 ### 本地构建镜像
 
 ```bash

@@ -615,6 +615,16 @@ def _assemble_vllm(app: FastAPI, args) -> None:
     app.include_router(build_common_router("/v1"))
     app.include_router(build_common_router("/v2"))
 
+    # 条件挂载 Web UI（演示页已内置 partial→final 实时渲染）
+    if getattr(args, "web", False):
+        from app.web.views import web_router, ASSETS_DIR, DOCS_MEDIA_DIR
+        app.include_router(web_router)
+        app.mount("/web-ui/assets", StaticFiles(directory=ASSETS_DIR), name="web-assets")
+        if os.path.isdir(DOCS_MEDIA_DIR):
+            app.mount("/web-ui/docs-media", StaticFiles(directory=DOCS_MEDIA_DIR), name="docs-media")
+        cfg.ENABLE_WEB = True
+        logger.info(f"Web UI 已启用，访问 http://{cfg.HOST}:{cfg.PORT}/web-ui")
+
     @app.on_event("shutdown")
     def _on_vllm_shutdown():
         logger.info("收到终止信号，正在关闭 vLLM 实时后端...")

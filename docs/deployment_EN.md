@@ -160,6 +160,23 @@ docker compose -f docker/docker-compose.yml down
 
 Startup parameters, API keys, port mappings, etc. can be configured in `docker/docker-compose.yml`. See comments in the file. The CPU variant lives in `docker/docker-compose.cpu.yml`.
 
+### vLLM Native Streaming Image (standalone)
+
+The vLLM mode (Route A, incremental partial→final streaming) ships as a **standalone GPU-only image** derived from the official `vllm/vllm-openai` image — not merged with the default image, so standard users don't download vLLM's heavy CUDA kernels and vllm users don't download OpenVINO/funasr. For capability differences and parameters see [Configuration: vLLM Native Streaming Mode](configuration_EN.md#vllm-native-streaming-mode-route-a).
+
+```bash
+# Start (separate port 8766, coexists with standard asr on 8765)
+docker compose -f docker/docker-compose.vllm.yml up -d
+
+# Stop
+docker compose -f docker/docker-compose.vllm.yml down
+
+# Build the vLLM image locally (build.sh option 4)
+bash docker/build.sh   # choose "4) vLLM"
+```
+
+> The vLLM engine holds the GPU in a separate EngineCore subprocess and the service runs a single worker (PID 1 reaps the subprocess in the container). It loads HF full-precision `models/asr/0.6b`/`1.7b` (shares the `models/` mount with standard).
+
 ### Build Image Locally
 
 ```bash

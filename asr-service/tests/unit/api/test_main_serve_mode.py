@@ -116,6 +116,21 @@ def test_vllm_mode_requires_cuda(isolated_create_app, monkeypatch):
         main.create_app(_args(serve_mode="vllm", device="cpu"))
 
 
+def test_vllm_mode_web_mounts_demo(isolated_create_app, monkeypatch):
+    """vllm + --web：挂载 Web UI，实时演示页（内置 partial 渲染）可达。"""
+    import app.config as cfg
+    import app.main as main
+    _mock_vllm_engine(monkeypatch)
+    saved_web = cfg.ENABLE_WEB
+    try:
+        app = main.create_app(_args(serve_mode="vllm", device="auto", web=True))
+        client = TestClient(app)
+        assert client.get("/web-ui/stream").status_code == 200
+        assert cfg.ENABLE_WEB is True
+    finally:
+        cfg.ENABLE_WEB = saved_web
+
+
 # ─── T09: 实时配置与启动参数 ───
 
 def test_standard_mode_with_stream_mounts_ws(isolated_create_app, monkeypatch):

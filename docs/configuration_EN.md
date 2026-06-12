@@ -17,6 +17,7 @@ Higher layers override lower ones for the same parameter; **explicitly passed** 
 - [Environment Variables](#environment-variables)
 - [Offline Task Persistence (tasks.db)](#offline-task-persistence-tasksdb)
 - [Speaker Diarization & Voiceprint Database (speakers.db)](#speaker-diarization--voiceprint-database-speakersdb)
+- [vLLM Native Streaming Mode (Route A)](#vllm-native-streaming-mode-route-a)
 - [Built-in Constants (app/config.py)](#built-in-constants-appconfigpy)
 
 ---
@@ -96,6 +97,19 @@ Reduces false triggers from far-field sounds and ambient noise. `--vad-speech-no
 | `--speaker-auto-enroll` / `--no-speaker-auto-enroll` | - | Enabled | Auto-enroll unmatched speakers from offline identification as `Speaker_NN` (**enabling auto-enroll = the deployer declares data-subject consent has been obtained**) |
 | `--speaker-auto-enroll-min-sec` | Seconds | `10.0` | Minimum total speech duration of a cluster for auto-enrollment (stricter than manual enrollment, to reduce noisy records) |
 | `--speaker-store-audio` / `--no-speaker-store-audio` | - | Disabled | Retain enrollment sample audio in `data/speaker_audio/` (widens the compliance surface, off by default) |
+
+### vLLM Native Streaming (only `--serve-mode vllm`)
+
+Effective only in vllm mode; requires a CUDA GPU and an isolated environment/image (see [vLLM Native Streaming Mode](#vllm-native-streaming-mode-route-a) below).
+
+| Parameter | Value | Default | Description |
+|------|------|--------|------|
+| `--gpu-memory-utilization` | 0–1 | `0.8` | vLLM GPU memory utilization (×total VRAM as budget) |
+| `--vllm-max-model-len` | number | model default (65536) | Max context length; lower to save KV cache memory |
+| `--vllm-chunk-size-sec` | float | `1.0` | Streaming decode chunk size (sec); smaller = finer partials (range 0.5–5) |
+| `--vllm-max-utterance-sec` | number | `20` | Per-utterance hard cut (sec); bounds context/memory growth |
+| `--vllm-concurrency` | number | `1` | Concurrent decoding sessions (generate is serial; >1 yields no throughput) |
+| `--vllm-end-silence-ms` | ms | `800` | Energy endpointer end-silence threshold |
 
 ### Config-file Meta Parameters
 
@@ -198,6 +212,39 @@ api_key: "sk-your-key"
 - **Data is never auto-cleaned**: `speakers.db` has no TTL (unlike tasks.db's 7-day cleanup) — voiceprints are a long-term accumulating asset, and identification gets more accurate the more they are used; the only way to delete is `DELETE /v2/speakers/{id}` (hard delete + physical reclamation) or deleting the database file.
 - **Auto-enrollment**: during offline transcription with `identify_speakers` enabled, speakers that miss the database and have sufficient speech (default ≥10s) are auto-enrolled as `说话人_NN` (Chinese for "Speaker_NN"); after renaming via `/web-ui/speakers` or `PATCH /v2/speakers/{id}`, subsequent transcriptions display the real name directly; the real-time path does not auto-enroll (online clustering drift easily causes duplicate records); matched speakers never get templates auto-appended either (to prevent sample poisoning) — add samples manually via `POST /v2/speakers/{id}/templates`.
 - **Compliance**: the enrollment endpoint enforces `consent=true` as double-insurance (endpoint + database constraint); enabling auto-enrollment means the deployer declares data-subject consent has been obtained; audio is not retained by default; the audit log is persisted alongside the database. **Backup = copy the single `data/speakers.db` file** (recommend including it in your regular backup plan); deleting the database completely erases all voiceprint data.
+
+## vLLM Native Streaming Mode (Route A)
+
+`--serve-mode vllm` enables the vLLM native streaming engine, providing **incremental (partial→final)** real-time transcription; it is **mutually exclusive** with the default `standard` mode (Route B: online VAD + offline decode, per-segment final).
+
+**Capability differences**
+
+| Aspect | standard (default) | vllm |
+|------|-----------------|------|
+| Endpoints | offline v1/v2 + realtime WS (`--enable-stream`) | **realtime WS `/v2/asr/stream` only** + `/health` + `/capabilities` |
+| Incremental results | none (per-segment final) | **partial→final** |
+| Word timestamps / speaker | supported | not supported |
+| Device | GPU / CPU | **CUDA GPU only** |
+| Throughput | concurrent sessions | single-stream serial (generate is serial; ≈ standard) |
+| Deps / image | funasr + OpenVINO… | isolated vLLM env (no funasr/OpenVINO), separate image |
+
+**Why an isolated environment**: vLLM pins a specific torch/CUDA (incompatible with standard's torch), so it requires an isolated `venv-vllm` or a separate image (`docker/Dockerfile.vllm`, derived from the official vLLM image). See the [deployment guide](deployment_EN.md).
+
+**Start**
+
+```bash
+# Local (isolated venv-vllm, installs only requirements-vllm.txt)
+asr-service/venv-vllm/bin/python -m app.main --serve-mode vllm --model-size 0.6b --web
+
+# Docker (separate image, separate port 8766)
+docker compose -f docker/docker-compose.vllm.yml up -d
+```
+
+**Notes**
+
+- **Process model**: the vLLM engine holds the GPU in a separate EngineCore subprocess; the service runs a **single worker** (uvicorn default workers=1; multiple workers would each load the model and exhaust VRAM).
+- **Graceful stop**: on exit the EngineCore subprocess may not be reaped immediately with the parent; in Docker the container stop reaps it. For manual runs, `pkill -f "serve-mode vllm"` then verify VRAM is freed via `nvidia-smi`.
+- **Model**: loads HF full-precision `models/asr/0.6b` or `1.7b` (not the OpenVINO quantized variants); the web demo (`--web` → `/web-ui/stream`) already renders partial→final live.
 
 ## Built-in Constants (app/config.py)
 
