@@ -48,6 +48,24 @@
 
 ---
 
+## 〇·五、Stage B 实测验证（已完成 ✅）
+
+> 已在本机用 `mlx-qwen3-asr 0.3.5`（纯 MLX，无 PyTorch）实测 ASR 迁移，对比上文 OpenVINO golden。脚本：`asr-service/scripts/mlx_validate.py`，数据：`mlx_validate_result.json`。
+
+| 样本 | MLX ASR RTF (fp16) | OpenVINO **ASR-only** RTF | **ASR 组件加速** | CER vs golden | 文本质量 |
+|---|---:|---:|---:|---:|---|
+| yuanzhuo (中文, 108.5s) | **0.0441** | 0.184 | **4.2×** | **1.06%** | 与 golden 几乎一致 |
+| RAG_08min (英文, 476.5s) | **0.0489** | 0.182 | **3.7×** | **4.0%** | MLX 标点更干净（golden 的 CT-Transformer 有重复标点伪影） |
+
+**已验证结论**：
+1. **MLX ASR 比 OpenVINO CPU 快约 3.7–4.2×**（RTF 0.18 → 0.044–0.049），文本质量等同甚至更好（CER 1–4%，差异主要是标点）。
+2. **依赖极简**：MLX ASR 栈仅 `mlx` + `mlx-metal` + `numpy` + `huggingface-hub` + `typer` 等，**无 torch / openvino / funasr**。模型加载（已缓存）0.3s。
+3. **端到端投影**：仅迁 ASR → 端到端 RTF 0.32 **→ ~0.19**（此时 **CAM++ 说话人 embedding 升为第一瓶颈，占剩余 ~58%**，印证 Stage C 必做）；ASR + 说话人都迁 MLX → 端到端 **~0.09**（约 3.5× 端到端）。
+4. **路线选择**：`mlx-qwen3-asr` 的 `transcribe()` 接口、量化、流式、forced-aligner 完备，**推荐作为 `MLXASREngine` 的底层**（路线 b），无需自研。
+5. **注意（坑）**：`mlx-qwen3-asr` 内置的 `diarize=True` 走 **pyannote**（需 HF 鉴权、首次会卡在模型下载，实测挂起）。**我们不用它**——说话人分离仍用现有 CAM++ 路径，MLX 仅负责 ASR（`diarize=False`）。
+
+---
+
 ## 一、可行性分析（逐组件）
 
 ### 生态前提：MLX 已有成熟的 Qwen3-ASR 实现
@@ -114,7 +132,7 @@
 
 ### 阶段 B：ASR → MLX（P0，核心收益，1–2 周）
 
-- [ ] 评估两条路线：(a) 直接依赖 `mlx-audio` 的 `qwen3_asr`；(b) 集成 `mlx-qwen3-asr`；(c) 参照其实现自研 `MLXASREngine`。推荐先 (a)/(b) 快速验证收益，再决定是否自研以贴合现有 `transcribe()/batch_transcribe()/transcribe_array()` 接口与流式会话。
+- [x] **可行性已实测验证**（见〇·五）：`mlx-qwen3-asr` ASR 比 OpenVINO 快 3.7–4.2×，CER 1–4%，依赖极简。**采用路线 (b)：以 `mlx-qwen3-asr` 为底层封装 `MLXASREngine`。**
 - [ ] 新增 `app/engines/mlx_asr_engine.py`，实现与 `OpenVINOASREngine` 同构接口（含 0.6B/1.7B、language 映射、word timestamps）。
 - [ ] 量化档位实测：fp16 / 8-bit / 4-bit 的 RTF × CER 折中，选默认档（建议 8-bit，"近 fp16 质量"）。
 - [ ] 精度回归：对齐 golden（CER 漂移阈值，如 < 相对 2%）。

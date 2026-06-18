@@ -1,0 +1,1087 @@
+{
+  "yuanzhuo.wav": {
+    "backend": "openvino_int8_0.6b + campplus",
+    "duration": 108.54,
+    "wall": 35.32,
+    "rtf": 0.325,
+    "full_text": "这是在七千年前的材料上的。。你这个是一家之说呢？，还是学科已经获得承认。？现在还没有人认出这个东西。，这是我认出来的。。但是这些字如果摆在你们面前，你们很容易认出来。。因为和甲骨文是完全一样的。。因为甲骨文不可能是最早的文字嘛。，它已经有四千个字了。。对，那文字的一开始，在它之前，，对，肯定有雏形的这个文字。。四千个字是一个什么概念？？四千个字可以说，，这是我们的文化程度。，对，几乎比今天我们大部分国人一生掌握的汉字还要多。。对，我们就是三千个字左右。，对，对，就这样的。，就它不可能是凭空蹦出来的嘛。。而且甲骨文它是原生文字。，它不是次生文字。。里面后来产生的一些民族古文字都是次声的。，它有一个原型，，它可以照着它造。。那这种原生文字，每一个概念都要通过格物。它才能够创造完成，，所以它不可能是短期内完成的。。所以现在的天文考古学的那么关键的位置就在这里。：，透过理解古人如何观察，如何跟天文来对应？，然后再把这种认识。。展现在人类的礼仪啦、制度啦、符号啦，上面是啊，是的，可可以这样理解吗？？完全是可以的。。我们可以说，天文学时期就是中国文明的源。。嗯。啊，，就是中华文化的很多的核心的思想。，最后你都得导源于天文。。能够说是全世界人类文明的源呢？？不仅是中国文明的源。，至少是中国是这样。，就是说它联系太深太深厚了。。",
+    "n_segments": 52,
+    "speakers": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ],
+    "segments": [
+      {
+        "start": 0.77,
+        "end": 3.026,
+        "text": "这是在七千年前的材料上的。",
+        "speaker": "A"
+      },
+      {
+        "start": 3.026,
+        "end": 3.2,
+        "text": "。",
+        "speaker": "A"
+      },
+      {
+        "start": 4.33,
+        "end": 6.084,
+        "text": "你这个是一家之说呢？",
+        "speaker": "B"
+      },
+      {
+        "start": 6.084,
+        "end": 8.189,
+        "text": "，还是学科已经获得承认。",
+        "speaker": "B"
+      },
+      {
+        "start": 8.189,
+        "end": 8.365,
+        "text": "？",
+        "speaker": "B"
+      },
+      {
+        "start": 8.365,
+        "end": 10.645,
+        "text": "现在还没有人认出这个东西。",
+        "speaker": "A"
+      },
+      {
+        "start": 10.645,
+        "end": 12.224,
+        "text": "，这是我认出来的。",
+        "speaker": "A"
+      },
+      {
+        "start": 12.224,
+        "end": 12.4,
+        "text": "。",
+        "speaker": "A"
+      },
+      {
+        "start": 12.4,
+        "end": 16.435,
+        "text": "但是这些字如果摆在你们面前，你们很容易认出来。",
+        "speaker": "A"
+      },
+      {
+        "start": 16.435,
+        "end": 19.165,
+        "text": "。因为和甲骨文是完全一样的。",
+        "speaker": "A"
+      },
+      {
+        "start": 19.165,
+        "end": 19.34,
+        "text": "。",
+        "speaker": "A"
+      },
+      {
+        "start": 20.11,
+        "end": 22.81,
+        "text": "因为甲骨文不可能是最早的文字嘛。",
+        "speaker": "C"
+      },
+      {
+        "start": 22.81,
+        "end": 24.666,
+        "text": "，它已经有四千个字了。",
+        "speaker": "C"
+      },
+      {
+        "start": 24.666,
+        "end": 24.835,
+        "text": "。",
+        "speaker": "C"
+      },
+      {
+        "start": 24.835,
+        "end": 29.728,
+        "text": "对，那文字的一开始，在它之前，，对，肯定有雏形的这个文字。",
+        "speaker": "C"
+      },
+      {
+        "start": 29.728,
+        "end": 29.896,
+        "text": "。",
+        "speaker": "A"
+      },
+      {
+        "start": 29.896,
+        "end": 31.921,
+        "text": "四千个字是一个什么概念？",
+        "speaker": "A"
+      },
+      {
+        "start": 31.921,
+        "end": 32.09,
+        "text": "？",
+        "speaker": "A"
+      },
+      {
+        "start": 32.61,
+        "end": 35.73,
+        "text": "四千个字可以说，，这是我们的文化程度。",
+        "speaker": "A"
+      },
+      {
+        "start": 35.73,
+        "end": 39.999,
+        "text": "，对，几乎比今天我们大部分国人一生掌握的汉字还要多。",
+        "speaker": "A"
+      },
+      {
+        "start": 39.999,
+        "end": 40.163,
+        "text": "。",
+        "speaker": "A"
+      },
+      {
+        "start": 40.163,
+        "end": 42.298,
+        "text": "对，我们就是三千个字左右。",
+        "speaker": "A"
+      },
+      {
+        "start": 42.298,
+        "end": 43.94,
+        "text": "，对，对，就这样的。",
+        "speaker": "B"
+      },
+      {
+        "start": 43.94,
+        "end": 46.403,
+        "text": "，就它不可能是凭空蹦出来的嘛。",
+        "speaker": "C"
+      },
+      {
+        "start": 46.403,
+        "end": 46.567,
+        "text": "。",
+        "speaker": "C"
+      },
+      {
+        "start": 46.567,
+        "end": 48.538,
+        "text": "而且甲骨文它是原生文字。",
+        "speaker": "A"
+      },
+      {
+        "start": 48.538,
+        "end": 50.016,
+        "text": "，它不是次生文字。",
+        "speaker": "A"
+      },
+      {
+        "start": 50.016,
+        "end": 53.222,
+        "text": "。里面后来产生的一些民族古文字都是次声的。",
+        "speaker": "A"
+      },
+      {
+        "start": 53.222,
+        "end": 55.808,
+        "text": "，它有一个原型，，它可以照着它造。",
+        "speaker": "A"
+      },
+      {
+        "start": 55.808,
+        "end": 55.96,
+        "text": "。",
+        "speaker": "A"
+      },
+      {
+        "start": 56.42,
+        "end": 60.31,
+        "text": "那这种原生文字，每一个概念都要通过格物。",
+        "speaker": "A"
+      },
+      {
+        "start": 61.25,
+        "end": 67.007,
+        "text": "它才能够创造完成，，所以它不可能是短期内完成的。",
+        "speaker": "A"
+      },
+      {
+        "start": 67.007,
+        "end": 67.247,
+        "text": "。",
+        "speaker": "D"
+      },
+      {
+        "start": 67.247,
+        "end": 72.764,
+        "text": "所以现在的天文考古学的那么关键的位置就在这里。",
+        "speaker": "D"
+      },
+      {
+        "start": 72.764,
+        "end": 78.041,
+        "text": "：，透过理解古人如何观察，如何跟天文来对应？",
+        "speaker": "D"
+      },
+      {
+        "start": 78.041,
+        "end": 80.44,
+        "text": "，然后再把这种认识。",
+        "speaker": "D"
+      },
+      {
+        "start": 80.44,
+        "end": 87.581,
+        "text": "。展现在人类的礼仪啦、制度啦、符号啦，上面是啊，是的，可可以这样理解吗？",
+        "speaker": "D"
+      },
+      {
+        "start": 87.581,
+        "end": 87.778,
+        "text": "？",
+        "speaker": "D"
+      },
+      {
+        "start": 87.778,
+        "end": 89.158,
+        "text": "完全是可以的。",
+        "speaker": "A"
+      },
+      {
+        "start": 89.158,
+        "end": 89.355,
+        "text": "。",
+        "speaker": "A"
+      },
+      {
+        "start": 89.355,
+        "end": 93.299,
+        "text": "我们可以说，天文学时期就是中国文明的源。",
+        "speaker": "A"
+      },
+      {
+        "start": 93.299,
+        "end": 93.496,
+        "text": "。",
+        "speaker": "A"
+      },
+      {
+        "start": 93.496,
+        "end": 93.89,
+        "text": "嗯。",
+        "speaker": "A"
+      },
+      {
+        "start": 94.17,
+        "end": 97.455,
+        "text": "啊，，就是中华文化的很多的核心的思想。",
+        "speaker": "A"
+      },
+      {
+        "start": 97.455,
+        "end": 99.53,
+        "text": "，最后你都得导源于天文。",
+        "speaker": "A"
+      },
+      {
+        "start": 99.53,
+        "end": 99.703,
+        "text": "。",
+        "speaker": "D"
+      },
+      {
+        "start": 99.703,
+        "end": 102.296,
+        "text": "能够说是全世界人类文明的源呢？",
+        "speaker": "D"
+      },
+      {
+        "start": 102.296,
+        "end": 102.469,
+        "text": "？",
+        "speaker": "D"
+      },
+      {
+        "start": 102.469,
+        "end": 104.198,
+        "text": "不仅是中国文明的源。",
+        "speaker": "D"
+      },
+      {
+        "start": 104.198,
+        "end": 105.927,
+        "text": "，至少是中国是这样。",
+        "speaker": "A"
+      },
+      {
+        "start": 105.927,
+        "end": 108.347,
+        "text": "，就是说它联系太深太深厚了。",
+        "speaker": "A"
+      },
+      {
+        "start": 108.347,
+        "end": 108.52,
+        "text": "。",
+        "speaker": "A"
+      }
+    ]
+  },
+  "RAG_08min.wav": {
+    "backend": "openvino_int8_0.6b + campplus",
+    "duration": 476.5,
+    "wall": 152.69,
+    "rtf": 0.32,
+    "full_text": " Hey everyone, welcome back. In. This video,. We are going to build Rack system from scratch and show exactly where it once broke down. To make this concrete,. We are going to use real data transcripts from three legs, Fredmans broadcast: Jensen Yuang of Nvidia, Sam Altman of OpenAI, and Elon Musk. And. We'll build a simple Rack system first, show how it works,, and then hit with question: It cannot generally answer.. So, let's get into the code. So. Before we start with the code,, you have to configure your dotenv file with OpenAI API key. And. Here, we have set RAG chunk size as five hundred, RAG overlap as eighty, RAG top K as twenty, and RAG top N as five. So. Let's get into the code. So. First, we have imported the necessary libraries. We need. Then. We have loaded our dotenv file.. And, after that, from the dotyenv file,, we have extracted the parameters, like rack chunk, size, rack, overlap, rack, top K, and rack top N. And. After that,, we define two data classes. SRT blocks holds, one subtitle block., Its, index,, start, and end timestamp, and text chunk data classes we.. We actually store and search. It carries the text, timestamps inherited from the SRT, character positions in the full transcript, and the source file name and token count. And. After that,, we start with the phase one,, where we read the SRT files, split it on the blank lines,, and that's how SRT blocks are separated. For each block,. It extracts the index, past the timestamp arrow notation.. And joins the remaining lines as text. Invalid blocks are silently skipped. After phase one,. We start with the phase two, where we have two steps. First,. We define a function, which strips noise, transcript credits, bracketed annotation, musical symbols, HTML tags, anything that isn't actual speech. Then. We define another function reconstruct full text.. Which merges consecutive blocks into sentence-level segments by accumulating blocks until it hits a period, question, mark, or exclamation mark. This restores the natural sentence flow that SRT format breaks apart. And now, phase three does sliding window chunking. Over those segments. It uses a stick token to count the tokens accurately.. Build chunks up to 500 tokens.. And then steps forward while keeping an et token overlap between chunks. It also builds a character to segment lookup. So every chunk inherits correct timestamps from the original srt's. Now phase four is dense retrieval. The vector store class wraps, chroma db with bg small embedding model. Documents get a special prefix.. Represent, this sentence for searching, and queries get a different prefix. Represent. This question. This asymmetric, prompting is a BG best practice that improves retrieval accuracy. And. Then finally,. The results are scored by cosine. Similarity. Now, FaceFire adds a keyword-based layer using BM twenty five, the same algorithm behind classic search engine.. It tokenizes chunks, while lower casing and stripping punctuation. Then scores them against the query by term frequency. This catches the exact keyword match that semantic embedding. Sometimes misses. And now phase six, where we combine both retriever using reciprocal rank fusion. Instead of merging raw scores,, which are on incompatible scales, RRF uses rank position. Dense results gets. Sixty percentage weightage,, while sparse gets forty percent. Each chunk's final score is the sum of these weightages from each list. The result is a single rank list that benefits from both semantic understanding and keyword precision. And. Now phase seven does a final quality. Pass. The top twenty fused candidates get scored by across encoder MS Macro Mini LM.. Which reads the query and each chunk together, rather than as a separate embedding. This is slower, but more accurate. We keep only the top five. Now. Everything is tied up together in the podcast rack. Class. The ingest method runs the full pipeline: parse, clean chunk,, embed BM twenty five pipeline for one file with disc caching.. So reuploads are instant. Multiple transcripts are accumulated into single unified BM, twenty five index and ChromaDB collection. So. Every query searches across all loaded files simultaneously. And. Then we have the retrieval, which uses hybrid retrieval, plus reranking across all indexed transcripts. We format, our context,. And then the load state method restores all of this.. After a page refresh,. And now that we have seen the entire pipeline,. Let's see it in action. The entire backend is exposed through a Streamlit interface app.py. I'll run it with Streamlit run app.py command, and upload the Sam Altman podcast SRT, and start asking question. So I'll open the terminal.. So, let's run our Streamlit app. So first of all, I'll activate my Conda environment., In, that,, Conda activate. Then I'll run the command Streamlit run app.py.. Let's run the one. Okay,. So here I'll drop my Sam Altman podcast transcript. I'll click process.. After processing the transcript,. We can just ask our questions.. So our transcript is processed. So. Now let's ask a simple question: Like,. What does Sam Altman say about the OpenAI bots? Ah, guy,? And how did it affect him? It should answer the question correctly because this was discussed at a length in a concatenated part of the transcript. So. Let's see if it answers correctly or not. So, it answers, like in the podcast, Sam Altman described the OpenAI bots as definitely the most.. Painful professional experience of my life and the chaotic and ashamedful and upsetting. Okay,. That's correct. And that's what he said in the podcast. And. Here are the sources. It used. Okay,. That's correct. So. Now, let's upload other files, too, like Elon Musk and Jensen Young podcast transcript,, and let's drop them and I'll set.. To process it,, and now I have uploaded three different transcript, files, and I'll cross-question. It now. So, all the transcripts are activated now,, and that's correct.. And, now let's ask a different question, from a different transcript,. And that is, \"How does Jensen Yuan explain why Nvidia moved from chip scale to rack scale design?\" And similarly,. It should answer correctly because the answer is in the transcript. And Jensen Yuan.. Explained that Nvidia moved from chip scale to rack scale because the problem they are trying to solve is no longer within a single computer that can be accelerated by one GPU. Okay,. This is also correct. And. Now I am going to ask a question, which will definitely break this rack system. And. The question is: Why did Elon, Musk,, who co-founded OpenAI and originally tried to recruit.. Ilya, away from the Google for his own AI initiative, end up end up suing OpenAI instead. And. What company did he build as his alternative? So I'll hit enter. So, a rack system answered this. But. Look at what it missed:. The entire Ilya angle is gone,, the recruitment story,, the tough battle against DeepMind to get Ilya,, who was the limchin of the OpenAI exist.. Only in Elon transcript and RAG didn't retrieve it.. It also got the lawsuit motivation slightly wrong, framed as he wanted control, rather than Open Source betrayal principle. And. Now I am going to ask a question, which will definitely break. This RAG system. So I will ask: Why did Elon Musk,, who cofounded OpenAI, and originally tried to recruit AI away from the Google?. For his own AI initiative, end up suing OpenAI instead,. And what company did he build as his alternative? So? Let's wait for the answer. So. We got a partial answer,, but look at what it drops entirely:. The Ilia angle,, the story of Elon recruiting Ilia in a tough battle against DeepMind.. Elon recruiting Ilia in a tough battle of deep mind. It also gets the lawsuit motivation wrong, framing it as Elon wanting control, rather than open source betrayal principle. That Sam Altman describes.. So Rag gave us the half story and got the motivation wrong.. Now,, that's it for this video. In. Next video,. We will understand the limitation of this rack system and see how the graph rack performs on the. So. That's it for this video. For. That's it for this video. In. The next video,. We will understand the limitation of this rack system..",
+    "n_segments": 124,
+    "speakers": [
+      "A"
+    ],
+    "segments": [
+      {
+        "start": 2.86,
+        "end": 4.338,
+        "text": " Hey everyone, welcome back.",
+        "speaker": "A"
+      },
+      {
+        "start": 4.338,
+        "end": 4.55,
+        "text": " In.",
+        "speaker": "A"
+      },
+      {
+        "start": 4.55,
+        "end": 9.988,
+        "text": " This video,. We are going to build Rack system from scratch and show exactly where it once broke down.",
+        "speaker": "A"
+      },
+      {
+        "start": 9.988,
+        "end": 18.648,
+        "text": " To make this concrete,. We are going to use real data transcripts from three legs, Fredmans broadcast: Jensen Yuang of Nvidia, Sam Altman of OpenAI, and Elon Musk.",
+        "speaker": "A"
+      },
+      {
+        "start": 18.648,
+        "end": 18.912,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 18.912,
+        "end": 26.691,
+        "text": " We'll build a simple Rack system first, show how it works,, and then hit with question: It cannot generally answer.. So, let's get into the code.",
+        "speaker": "A"
+      },
+      {
+        "start": 26.691,
+        "end": 26.912,
+        "text": " So.",
+        "speaker": "A"
+      },
+      {
+        "start": 26.912,
+        "end": 31.99,
+        "text": " Before we start with the code,, you have to configure your dotenv file with OpenAI API key.",
+        "speaker": "A"
+      },
+      {
+        "start": 31.99,
+        "end": 32.266,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 32.266,
+        "end": 38.724,
+        "text": " Here, we have set RAG chunk size as five hundred, RAG overlap as eighty, RAG top K as twenty, and RAG top N as five.",
+        "speaker": "A"
+      },
+      {
+        "start": 38.724,
+        "end": 38.945,
+        "text": " So.",
+        "speaker": "A"
+      },
+      {
+        "start": 38.945,
+        "end": 40.325,
+        "text": " Let's get into the code.",
+        "speaker": "A"
+      },
+      {
+        "start": 40.325,
+        "end": 40.546,
+        "text": " So.",
+        "speaker": "A"
+      },
+      {
+        "start": 40.546,
+        "end": 43.25,
+        "text": " First, we have imported the necessary libraries.",
+        "speaker": "A"
+      },
+      {
+        "start": 43.25,
+        "end": 43.747,
+        "text": " We need.",
+        "speaker": "A"
+      },
+      {
+        "start": 43.747,
+        "end": 44.078,
+        "text": " Then.",
+        "speaker": "A"
+      },
+      {
+        "start": 44.078,
+        "end": 54.243,
+        "text": " We have loaded our dotenv file.. And, after that, from the dotyenv file,, we have extracted the parameters, like rack chunk, size, rack, overlap, rack, top K, and rack top N. And.",
+        "speaker": "A"
+      },
+      {
+        "start": 54.243,
+        "end": 56.57,
+        "text": " After that,, we define two data classes.",
+        "speaker": "A"
+      },
+      {
+        "start": 56.57,
+        "end": 64.501,
+        "text": " SRT blocks holds, one subtitle block., Its, index,, start, and end timestamp, and text chunk data classes we.. We actually store and search.",
+        "speaker": "A"
+      },
+      {
+        "start": 64.501,
+        "end": 72.221,
+        "text": " It carries the text, timestamps inherited from the SRT, character positions in the full transcript, and the source file name and token count.",
+        "speaker": "A"
+      },
+      {
+        "start": 72.221,
+        "end": 72.493,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 72.493,
+        "end": 80.268,
+        "text": " After that,, we start with the phase one,, where we read the SRT files, split it on the blank lines,, and that's how SRT blocks are separated.",
+        "speaker": "A"
+      },
+      {
+        "start": 80.268,
+        "end": 86.498,
+        "text": " For each block,. It extracts the index, past the timestamp arrow notation.. And joins the remaining lines as text.",
+        "speaker": "A"
+      },
+      {
+        "start": 86.498,
+        "end": 88.489,
+        "text": " Invalid blocks are silently skipped.",
+        "speaker": "A"
+      },
+      {
+        "start": 88.489,
+        "end": 92.363,
+        "text": " After phase one,. We start with the phase two, where we have two steps.",
+        "speaker": "A"
+      },
+      {
+        "start": 92.363,
+        "end": 100.703,
+        "text": " First,. We define a function, which strips noise, transcript credits, bracketed annotation, musical symbols, HTML tags, anything that isn't actual speech.",
+        "speaker": "A"
+      },
+      {
+        "start": 100.703,
+        "end": 101.026,
+        "text": " Then.",
+        "speaker": "A"
+      },
+      {
+        "start": 101.026,
+        "end": 111.872,
+        "text": " We define another function reconstruct full text.. Which merges consecutive blocks into sentence-level segments by accumulating blocks until it hits a period, question, mark, or exclamation mark.",
+        "speaker": "A"
+      },
+      {
+        "start": 111.872,
+        "end": 115.784,
+        "text": " This restores the natural sentence flow that SRT format breaks apart.",
+        "speaker": "A"
+      },
+      {
+        "start": 115.784,
+        "end": 118.633,
+        "text": " And now, phase three does sliding window chunking.",
+        "speaker": "A"
+      },
+      {
+        "start": 118.633,
+        "end": 119.807,
+        "text": " Over those segments.",
+        "speaker": "A"
+      },
+      {
+        "start": 119.807,
+        "end": 129.519,
+        "text": " It uses a stick token to count the tokens accurately.. Build chunks up to 500 tokens.. And then steps forward while keeping an et token overlap between chunks.",
+        "speaker": "A"
+      },
+      {
+        "start": 129.519,
+        "end": 132.134,
+        "text": " It also builds a character to segment lookup.",
+        "speaker": "A"
+      },
+      {
+        "start": 132.134,
+        "end": 137.989,
+        "text": " So every chunk inherits correct timestamps from the original srt's. Now phase four is dense retrieval.",
+        "speaker": "A"
+      },
+      {
+        "start": 137.989,
+        "end": 142.024,
+        "text": " The vector store class wraps, chroma db with bg small embedding model.",
+        "speaker": "A"
+      },
+      {
+        "start": 142.024,
+        "end": 148.007,
+        "text": " Documents get a special prefix.. Represent, this sentence for searching, and queries get a different prefix.",
+        "speaker": "A"
+      },
+      {
+        "start": 148.007,
+        "end": 148.601,
+        "text": " Represent.",
+        "speaker": "A"
+      },
+      {
+        "start": 148.601,
+        "end": 149.412,
+        "text": " This question.",
+        "speaker": "A"
+      },
+      {
+        "start": 149.412,
+        "end": 153.897,
+        "text": " This asymmetric, prompting is a BG best practice that improves retrieval accuracy.",
+        "speaker": "A"
+      },
+      {
+        "start": 153.897,
+        "end": 154.167,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 154.167,
+        "end": 156.815,
+        "text": " Then finally,. The results are scored by cosine.",
+        "speaker": "A"
+      },
+      {
+        "start": 156.815,
+        "end": 157.464,
+        "text": " Similarity.",
+        "speaker": "A"
+      },
+      {
+        "start": 157.464,
+        "end": 167.298,
+        "text": " Now, FaceFire adds a keyword-based layer using BM twenty five, the same algorithm behind classic search engine.. It tokenizes chunks, while lower casing and stripping punctuation.",
+        "speaker": "A"
+      },
+      {
+        "start": 167.298,
+        "end": 170.302,
+        "text": " Then scores them against the query by term frequency.",
+        "speaker": "A"
+      },
+      {
+        "start": 170.302,
+        "end": 173.752,
+        "text": " This catches the exact keyword match that semantic embedding.",
+        "speaker": "A"
+      },
+      {
+        "start": 173.752,
+        "end": 174.753,
+        "text": " Sometimes misses.",
+        "speaker": "A"
+      },
+      {
+        "start": 174.753,
+        "end": 179.26,
+        "text": " And now phase six, where we combine both retriever using reciprocal rank fusion.",
+        "speaker": "A"
+      },
+      {
+        "start": 179.26,
+        "end": 184.267,
+        "text": " Instead of merging raw scores,, which are on incompatible scales, RRF uses rank position.",
+        "speaker": "A"
+      },
+      {
+        "start": 184.267,
+        "end": 188.78,
+        "text": " Dense results gets. Sixty percentage weightage,, while sparse gets forty percent.",
+        "speaker": "A"
+      },
+      {
+        "start": 188.78,
+        "end": 192.728,
+        "text": " Each chunk's final score is the sum of these weightages from each list.",
+        "speaker": "A"
+      },
+      {
+        "start": 192.728,
+        "end": 198.376,
+        "text": " The result is a single rank list that benefits from both semantic understanding and keyword precision.",
+        "speaker": "A"
+      },
+      {
+        "start": 198.376,
+        "end": 198.65,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 198.65,
+        "end": 200.734,
+        "text": " Now phase seven does a final quality.",
+        "speaker": "A"
+      },
+      {
+        "start": 200.734,
+        "end": 201.063,
+        "text": " Pass.",
+        "speaker": "A"
+      },
+      {
+        "start": 201.063,
+        "end": 210.287,
+        "text": " The top twenty fused candidates get scored by across encoder MS Macro Mini LM.. Which reads the query and each chunk together, rather than as a separate embedding.",
+        "speaker": "A"
+      },
+      {
+        "start": 210.287,
+        "end": 212.303,
+        "text": " This is slower, but more accurate.",
+        "speaker": "A"
+      },
+      {
+        "start": 212.303,
+        "end": 213.858,
+        "text": " We keep only the top five.",
+        "speaker": "A"
+      },
+      {
+        "start": 213.858,
+        "end": 214.146,
+        "text": " Now.",
+        "speaker": "A"
+      },
+      {
+        "start": 214.146,
+        "end": 217.141,
+        "text": " Everything is tied up together in the podcast rack.",
+        "speaker": "A"
+      },
+      {
+        "start": 217.141,
+        "end": 217.544,
+        "text": " Class.",
+        "speaker": "A"
+      },
+      {
+        "start": 217.544,
+        "end": 226.198,
+        "text": " The ingest method runs the full pipeline: parse, clean chunk,, embed BM twenty five pipeline for one file with disc caching.. So reuploads are instant.",
+        "speaker": "A"
+      },
+      {
+        "start": 226.198,
+        "end": 231.789,
+        "text": " Multiple transcripts are accumulated into single unified BM, twenty five index and ChromaDB collection.",
+        "speaker": "A"
+      },
+      {
+        "start": 231.789,
+        "end": 232.004,
+        "text": " So.",
+        "speaker": "A"
+      },
+      {
+        "start": 232.004,
+        "end": 235.283,
+        "text": " Every query searches across all loaded files simultaneously.",
+        "speaker": "A"
+      },
+      {
+        "start": 235.283,
+        "end": 235.552,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 235.552,
+        "end": 241.143,
+        "text": " Then we have the retrieval, which uses hybrid retrieval, plus reranking across all indexed transcripts.",
+        "speaker": "A"
+      },
+      {
+        "start": 241.143,
+        "end": 250.893,
+        "text": " We format, our context,. And then the load state method restores all of this.. After a page refresh,. And now that we have seen the entire pipeline,. Let's see it in action.",
+        "speaker": "A"
+      },
+      {
+        "start": 250.893,
+        "end": 254.832,
+        "text": " The entire backend is exposed through a Streamlit interface app.py.",
+        "speaker": "A"
+      },
+      {
+        "start": 254.832,
+        "end": 261.378,
+        "text": " I'll run it with Streamlit run app.py command, and upload the Sam Altman podcast SRT, and start asking question.",
+        "speaker": "A"
+      },
+      {
+        "start": 261.378,
+        "end": 265.436,
+        "text": " So I'll open the terminal.. So, let's run our Streamlit app.",
+        "speaker": "A"
+      },
+      {
+        "start": 265.436,
+        "end": 271.414,
+        "text": " So first of all, I'll activate my Conda environment., In, that,, Conda activate.",
+        "speaker": "A"
+      },
+      {
+        "start": 271.414,
+        "end": 277.467,
+        "text": " Then I'll run the command Streamlit run app.py.. Let's run the one.",
+        "speaker": "A"
+      },
+      {
+        "start": 277.467,
+        "end": 282.86,
+        "text": " Okay,. So here I'll drop my Sam Altman podcast transcript.",
+        "speaker": "A"
+      },
+      {
+        "start": 282.86,
+        "end": 291.143,
+        "text": " I'll click process.. After processing the transcript,. We can just ask our questions.. So our transcript is processed.",
+        "speaker": "A"
+      },
+      {
+        "start": 291.143,
+        "end": 291.351,
+        "text": " So.",
+        "speaker": "A"
+      },
+      {
+        "start": 291.351,
+        "end": 295.924,
+        "text": " Now let's ask a simple question: Like,. What does Sam Altman say about the OpenAI bots?",
+        "speaker": "A"
+      },
+      {
+        "start": 295.924,
+        "end": 296.444,
+        "text": " Ah, guy,?",
+        "speaker": "A"
+      },
+      {
+        "start": 296.444,
+        "end": 297.847,
+        "text": " And how did it affect him?",
+        "speaker": "A"
+      },
+      {
+        "start": 297.847,
+        "end": 304.135,
+        "text": " It should answer the question correctly because this was discussed at a length in a concatenated part of the transcript.",
+        "speaker": "A"
+      },
+      {
+        "start": 304.135,
+        "end": 304.343,
+        "text": " So.",
+        "speaker": "A"
+      },
+      {
+        "start": 304.343,
+        "end": 306.525,
+        "text": " Let's see if it answers correctly or not.",
+        "speaker": "A"
+      },
+      {
+        "start": 306.525,
+        "end": 316.913,
+        "text": " So, it answers, like in the podcast, Sam Altman described the OpenAI bots as definitely the most.. Painful professional experience of my life and the chaotic and ashamedful and upsetting.",
+        "speaker": "A"
+      },
+      {
+        "start": 316.913,
+        "end": 318.268,
+        "text": " Okay,. That's correct.",
+        "speaker": "A"
+      },
+      {
+        "start": 318.268,
+        "end": 320.624,
+        "text": " And that's what he said in the podcast.",
+        "speaker": "A"
+      },
+      {
+        "start": 320.624,
+        "end": 320.919,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 320.919,
+        "end": 322.215,
+        "text": " Here are the sources.",
+        "speaker": "A"
+      },
+      {
+        "start": 322.215,
+        "end": 322.745,
+        "text": " It used.",
+        "speaker": "A"
+      },
+      {
+        "start": 322.745,
+        "end": 324.1,
+        "text": " Okay,. That's correct.",
+        "speaker": "A"
+      },
+      {
+        "start": 324.1,
+        "end": 324.335,
+        "text": " So.",
+        "speaker": "A"
+      },
+      {
+        "start": 324.335,
+        "end": 338.79,
+        "text": " Now, let's upload other files, too, like Elon Musk and Jensen Young podcast transcript,, and let's drop them and I'll set.. To process it,, and now I have uploaded three different transcript, files, and I'll cross-question.",
+        "speaker": "A"
+      },
+      {
+        "start": 338.79,
+        "end": 339.362,
+        "text": " It now.",
+        "speaker": "A"
+      },
+      {
+        "start": 339.362,
+        "end": 355.194,
+        "text": " So, all the transcripts are activated now,, and that's correct.. And, now let's ask a different question, from a different transcript,. And that is, \"How does Jensen Yuan explain why Nvidia moved from chip scale to rack scale design?",
+        "speaker": "A"
+      },
+      {
+        "start": 355.194,
+        "end": 360.679,
+        "text": "\" And similarly,. It should answer correctly because the answer is in the transcript.",
+        "speaker": "A"
+      },
+      {
+        "start": 360.679,
+        "end": 371.185,
+        "text": " And Jensen Yuan.. Explained that Nvidia moved from chip scale to rack scale because the problem they are trying to solve is no longer within a single computer that can be accelerated by one GPU.",
+        "speaker": "A"
+      },
+      {
+        "start": 371.185,
+        "end": 372.716,
+        "text": " Okay,. This is also correct.",
+        "speaker": "A"
+      },
+      {
+        "start": 372.716,
+        "end": 372.98,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 372.98,
+        "end": 377.203,
+        "text": " Now I am going to ask a question, which will definitely break this rack system.",
+        "speaker": "A"
+      },
+      {
+        "start": 377.203,
+        "end": 377.467,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 377.467,
+        "end": 387.764,
+        "text": " The question is: Why did Elon, Musk,, who co-founded OpenAI and originally tried to recruit.. Ilya, away from the Google for his own AI initiative, end up end up suing OpenAI instead.",
+        "speaker": "A"
+      },
+      {
+        "start": 387.764,
+        "end": 388.06,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 388.06,
+        "end": 390.787,
+        "text": " What company did he build as his alternative?",
+        "speaker": "A"
+      },
+      {
+        "start": 390.787,
+        "end": 391.913,
+        "text": " So I'll hit enter.",
+        "speaker": "A"
+      },
+      {
+        "start": 391.913,
+        "end": 393.869,
+        "text": " So, a rack system answered this.",
+        "speaker": "A"
+      },
+      {
+        "start": 393.869,
+        "end": 394.165,
+        "text": " But.",
+        "speaker": "A"
+      },
+      {
+        "start": 394.165,
+        "end": 414.155,
+        "text": " Look at what it missed:. The entire Ilya angle is gone,, the recruitment story,, the tough battle against DeepMind to get Ilya,, who was the limchin of the OpenAI exist.. Only in Elon transcript and RAG didn't retrieve it.. It also got the lawsuit motivation slightly wrong, framed as he wanted control, rather than Open Source betrayal principle.",
+        "speaker": "A"
+      },
+      {
+        "start": 414.155,
+        "end": 414.433,
+        "text": " And.",
+        "speaker": "A"
+      },
+      {
+        "start": 414.433,
+        "end": 417.941,
+        "text": " Now I am going to ask a question, which will definitely break.",
+        "speaker": "A"
+      },
+      {
+        "start": 417.941,
+        "end": 418.887,
+        "text": " This RAG system.",
+        "speaker": "A"
+      },
+      {
+        "start": 418.887,
+        "end": 425.234,
+        "text": " So I will ask: Why did Elon Musk,, who cofounded OpenAI, and originally tried to recruit AI away from the Google?",
+        "speaker": "A"
+      },
+      {
+        "start": 425.234,
+        "end": 431.582,
+        "text": ". For his own AI initiative, end up suing OpenAI instead,. And what company did he build as his alternative?",
+        "speaker": "A"
+      },
+      {
+        "start": 431.582,
+        "end": 431.817,
+        "text": " So?",
+        "speaker": "A"
+      },
+      {
+        "start": 431.817,
+        "end": 433.405,
+        "text": " Let's wait for the answer.",
+        "speaker": "A"
+      },
+      {
+        "start": 433.405,
+        "end": 433.64,
+        "text": " So.",
+        "speaker": "A"
+      },
+      {
+        "start": 433.64,
+        "end": 445.894,
+        "text": " We got a partial answer,, but look at what it drops entirely:. The Ilia angle,, the story of Elon recruiting Ilia in a tough battle against DeepMind.. Elon recruiting Ilia in a tough battle of deep mind.",
+        "speaker": "A"
+      },
+      {
+        "start": 445.894,
+        "end": 452.774,
+        "text": " It also gets the lawsuit motivation wrong, framing it as Elon wanting control, rather than open source betrayal principle.",
+        "speaker": "A"
+      },
+      {
+        "start": 452.774,
+        "end": 460.357,
+        "text": " That Sam Altman describes.. So Rag gave us the half story and got the motivation wrong.. Now,, that's it for this video.",
+        "speaker": "A"
+      },
+      {
+        "start": 460.357,
+        "end": 460.564,
+        "text": " In.",
+        "speaker": "A"
+      },
+      {
+        "start": 460.564,
+        "end": 466.313,
+        "text": " Next video,. We will understand the limitation of this rack system and see how the graph rack performs on the.",
+        "speaker": "A"
+      },
+      {
+        "start": 466.313,
+        "end": 466.52,
+        "text": " So.",
+        "speaker": "A"
+      },
+      {
+        "start": 466.52,
+        "end": 467.867,
+        "text": " That's it for this video.",
+        "speaker": "A"
+      },
+      {
+        "start": 467.867,
+        "end": 468.126,
+        "text": " For.",
+        "speaker": "A"
+      },
+      {
+        "start": 468.126,
+        "end": 469.472,
+        "text": " That's it for this video.",
+        "speaker": "A"
+      },
+      {
+        "start": 469.472,
+        "end": 469.679,
+        "text": " In.",
+        "speaker": "A"
+      },
+      {
+        "start": 469.679,
+        "end": 473.46,
+        "text": " The next video,. We will understand the limitation of this rack system..",
+        "speaker": "A"
+      }
+    ]
+  }
+}

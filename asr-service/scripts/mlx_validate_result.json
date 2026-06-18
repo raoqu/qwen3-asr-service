@@ -1,0 +1,24 @@
+{
+  "yuanzhuo.wav": {
+    "duration": 108.54,
+    "wall": 4.78,
+    "rtf": 0.0441,
+    "chars": 526,
+    "n_speakers": 0,
+    "cer_vs_golden": 0.0106,
+    "golden_rtf": 0.325,
+    "speedup_vs_openvino": 7.37,
+    "text_head": "这是在七千年前的材料上。你这个是一家之说呢，还是学科已经获得承认？现在还没有人认出这个东西，这是我认出来的。但是这些字如果摆在你们面前，你们很容易认出来，因为和甲骨文是完全一样的。因为甲骨文不可能是最早的文字嘛，它已经有四千个字了。对，那文字的一开始，在它之前，对，肯定有雏形的这个文字。四千个字是一个什么概念？四千个字可以说，这是我们的文化程度。对，几乎比今天我们大部分国人一生掌握的汉字还要多。对"
+  },
+  "RAG_08min.wav": {
+    "duration": 476.5,
+    "wall": 23.31,
+    "rtf": 0.0489,
+    "chars": 8050,
+    "n_speakers": 0,
+    "cer_vs_golden": 0.04,
+    "golden_rtf": 0.32,
+    "speedup_vs_openvino": 6.54,
+    "text_head": "Hey everyone, welcome back. In this video, we are going to build Rack system from scratch and show exactly where once break down. To make this concrete, we are going to use real data transcripts from "
+  }
+}
