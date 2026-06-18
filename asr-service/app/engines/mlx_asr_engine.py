@@ -13,7 +13,7 @@ MLX ASR 引擎（Apple Silicon）：基于 mlx-qwen3-asr 的 Qwen3-ASR，Metal G
 - 与 OpenVINO 引擎一致：不产出词级时间戳（align_enabled=False），按 chunk 逐段识别。
 """
 import logging
-import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -56,11 +56,18 @@ class MLXASREngine:
         self._model = None
         self._config = None
         self._M = None
-        # mlx-qwen3-asr 推理状态非线程安全：离线管线与流式会话共用此推理锁串行化
-        self._infer_lock = threading.Lock()
+        # MLX 的 Stream/计算上下文是线程局部的，且 mlx-qwen3-asr 在加载时即捕获 GPU
+        # stream——模型必须在「加载它的那个线程」上推理，否则报
+        # "There is no Stream(gpu, N) in current thread"。
+        # 因此用一个专用单线程 executor：load 与所有 transcribe 都在它上面执行，
+        # 既保证线程亲和性，又顺带把离线管线/流式会话的并发推理串行化（max_workers=1）。
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx-asr")
 
     def load(self):
-        """加载 MLX 模型（首次会从 HuggingFace 下载权重）。"""
+        """加载 MLX 模型（首次会从 HuggingFace 下载权重）。在专用线程上执行。"""
+        self._executor.submit(self._load_impl).result()
+
+    def _load_impl(self):
         try:
             import mlx.core as mx
             import mlx_qwen3_asr as M
@@ -95,10 +102,13 @@ class MLXASREngine:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
 
         lang = self._map_language(language)
-        with self._infer_lock:
+
+        def _run():
             res = self._M.transcribe(
                 audio_path, model=self._model, language=lang, diarize=False)
-        return [{"text": (res.text or "").strip()}]
+            return [{"text": (res.text or "").strip()}]
+
+        return self._executor.submit(_run).result()
 
     def transcribe_array(
         self,
@@ -123,11 +133,14 @@ class MLXASREngine:
             audio = audio.mean(axis=1)
 
         lang = self._map_language(language)
-        with self._infer_lock:
+
+        def _run():
             # mlx-qwen3-asr 接受 (array, sr) 元组，内部重采样到 16k 单声道
             res = self._M.transcribe(
                 (audio, sr), model=self._model, language=lang, diarize=False)
-        return [{"text": (res.text or "").strip()}]
+            return [{"text": (res.text or "").strip()}]
+
+        return self._executor.submit(_run).result()
 
     def _map_language(self, language: str | None) -> str | None:
         """短语言代码 → mlx 期望的语言全称；已是全称或未知则原样透传。"""
@@ -136,9 +149,14 @@ class MLXASREngine:
         return _LANG_MAP.get(language, language)
 
     def unload(self):
-        """释放资源。"""
-        self._model = None
-        self._config = None
+        """释放资源。在专用线程上清理模型，再关停 executor。"""
+        def _clear():
+            self._model = None
+            self._config = None
+        try:
+            self._executor.submit(_clear).result()
+        finally:
+            self._executor.shutdown(wait=True)
         logger.info("MLX ASR 模型已卸载")
 
     @property
