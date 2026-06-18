@@ -62,6 +62,16 @@ ARG_SPECS = (
         help_en="ASR model size (default: auto-selected by VRAM)",
     ),
     ArgSpec(
+        key="asr_backend", flags=("--asr-backend",), default="auto",
+        choices=("auto", "openvino", "mlx", "qwen"), group="模型",
+        help="ASR 推理后端：auto=CUDA→qwen / Apple Silicon→mlx / 其余 CPU→openvino；"
+             "mlx=MLX(Metal, 仅 Apple Silicon)；openvino=CPU INT8；qwen=PyTorch GPU "
+             "(default: auto)",
+        help_en="ASR inference backend: auto=CUDA->qwen / Apple Silicon->mlx / other CPU->"
+                "openvino; mlx=MLX(Metal, Apple Silicon only); openvino=CPU INT8; "
+                "qwen=PyTorch GPU (default: auto)",
+    ),
+    ArgSpec(
         key="enable_align", flags=("--enable-align",), default=True, type=bool,
         group="模型",
         help="加载对齐模型 (default)",

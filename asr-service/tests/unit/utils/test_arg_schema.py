@@ -13,6 +13,7 @@ LEGACY_DEFAULTS = {
     "serve_mode": "standard",
     "device": "auto",
     "model_size": None,
+    "asr_backend": "auto",
     "enable_align": True,
     "enable_punc": False,
     "model_source": "modelscope",

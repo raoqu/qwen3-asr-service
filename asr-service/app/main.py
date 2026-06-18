@@ -11,7 +11,7 @@ from app.utils.logger import setup_logger
 from app.utils.arg_schema import build_parser, ARG_SPECS, resolve_help_lang
 from app.utils.config_file import merge_runtime_config, run_config_update
 import app.config as cfg
-from app.runtime.device import detect_device, resolve_device, auto_select_model_size, should_disable_align
+from app.runtime.device import detect_device, resolve_device, auto_select_model_size, should_disable_align, resolve_asr_backend
 from app.api.common_routes import init_common, build_common_router
 # standard 专属重型依赖（funasr/transformers/OpenVINO 系引擎、离线管线/路由）容错导入：
 # vLLM 专用环境（无 funasr）下置为 None，使 app.main 仍可被 uvicorn factory 加载启动
@@ -281,12 +281,16 @@ def _assemble_standard(app: FastAPI, args) -> None:
         logger.critical(f"VAD 模型加载失败，服务无法启动: {e}")
         sys.exit(1)
 
-    # ASR 引擎（必须）—— CPU 使用 OpenVINO，GPU 使用 Qwen ASR
-    if is_cpu:
+    # ASR 引擎（必须）—— 后端按 --asr-backend 解析：
+    # Apple Silicon→MLX(Metal)，其余 CPU→OpenVINO(INT8)，CUDA→Qwen(PyTorch)
+    asr_backend = resolve_asr_backend(args.asr_backend, is_cpu)
+    if asr_backend == "mlx":
+        from app.engines.mlx_asr_engine import MLXASREngine
+        asr_engine = MLXASREngine(model_size=model_size)
+    elif asr_backend == "openvino":
         from app.engines.openvino_asr_engine import OpenVINOASREngine
         asr_engine = OpenVINOASREngine(model_size=model_size)
-        asr_backend = "openvino"
-    else:
+    else:  # qwen
         asr_engine = QwenASREngine(
             model_size=model_size,
             device=device_map,

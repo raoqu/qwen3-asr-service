@@ -133,6 +133,8 @@
 ### 阶段 B：ASR → MLX（P0，核心收益，1–2 周）
 
 - [x] **可行性已实测验证**（见〇·五）：`mlx-qwen3-asr` ASR 比 OpenVINO 快 3.7–4.2×，CER 1–4%，依赖极简。**采用路线 (b)：以 `mlx-qwen3-asr` 为底层封装 `MLXASREngine`。**
+- [x] **生产落地已完成**：`app/engines/mlx_asr_engine.py`（与 OpenVINO 引擎同构接口，含 `transcribe` / `transcribe_array` / `align_enabled=False`）；`app/runtime/device.py` 新增 `resolve_asr_backend()`（auto：Apple Silicon→mlx）；`--asr-backend auto|openvino|mlx|qwen`（arg_schema）；`main.py` 三后端装配；单测全绿（241 passed，含修正 schema-drift 守卫）。
+- [x] **集成测试通过**（`scripts/test_mlx_pipeline.py`，完整管线 + CAM++ 说话人）：yuanzhuo 端到端 RTF 0.325→**0.180（1.81×）**、说话人 4 ✓、CER **0.21%**；RAG_08min 0.32→**0.185（1.73×）**、说话人 1 ✓、CER **0.70%**。端到端仅 ~1.8× 正是因为 **CAM++ 说话人 embedding 已成第一瓶颈** → 触发 Stage C。
 - [ ] 新增 `app/engines/mlx_asr_engine.py`，实现与 `OpenVINOASREngine` 同构接口（含 0.6B/1.7B、language 映射、word timestamps）。
 - [ ] 量化档位实测：fp16 / 8-bit / 4-bit 的 RTF × CER 折中，选默认档（建议 8-bit，"近 fp16 质量"）。
 - [ ] 精度回归：对齐 golden（CER 漂移阈值，如 < 相对 2%）。
