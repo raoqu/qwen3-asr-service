@@ -95,6 +95,8 @@ class TaskManager:
                 "progress": t["progress"],
                 "language": t.get("language"),
                 "wav_name": t.get("wav_name"),
+                "duration": t.get("duration"),
+                "elapsed": t.get("elapsed"),
                 "created_at": t["created_at"],
                 "finished_at": t.get("finished_at"),
                 "error": t.get("error"),
@@ -195,6 +197,10 @@ class TaskManager:
                 elapsed = time.time() - start_time
 
                 with self._lock:
+                    # 识别耗时（实际处理墙钟，不含排队）+ 音频时长（pipeline 回传）→ 供历史列表展示 RTF
+                    task["elapsed"] = round(elapsed, 2)
+                    if isinstance(result, dict) and result.get("duration") is not None:
+                        task["duration"] = result["duration"]
                     if cancel_event and cancel_event.is_set():
                         task["status"] = "cancelled"
                         task["result"] = result

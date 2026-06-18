@@ -52,6 +52,7 @@
       'task.title': '任务历史', 'task.refresh': '刷新',
       'filter.all': '全部',
       'col.file': '文件 / 任务', 'col.status': '状态', 'col.progress': '进度',
+      'col.duration': '音频时长', 'col.elapsed': '识别耗时', 'col.rtf': 'RTF',
       'col.createdAt': '创建时间', 'col.actions': '操作',
       'col.view': '查看', 'col.delete': '删除',
       'task.deleteTitle': '删除任务记录',
@@ -98,6 +99,7 @@
       'task.title': 'Task history', 'task.refresh': 'Refresh',
       'filter.all': 'All',
       'col.file': 'File / Task', 'col.status': 'Status', 'col.progress': 'Progress',
+      'col.duration': 'Duration', 'col.elapsed': 'Time', 'col.rtf': 'RTF',
       'col.createdAt': 'Created', 'col.actions': 'Actions',
       'col.view': 'View', 'col.delete': 'Delete',
       'task.deleteTitle': 'Delete task record',
@@ -479,6 +481,18 @@
         {
           title: t('col.progress'), key: 'progress', width: wide.value ? 96 : 80,
           render: row => Math.round((row.progress || 0) * 100) + '%',
+        },
+        {
+          title: t('col.duration'), key: 'duration', width: wide.value ? 104 : 90,
+          render: row => (row.duration != null ? fmtTime(row.duration) : '-'),
+        },
+        {
+          title: t('col.elapsed'), key: 'elapsed', width: wide.value ? 96 : 84,
+          render: row => (row.elapsed != null ? row.elapsed.toFixed(1) + 's' : '-'),
+        },
+        {
+          title: t('col.rtf'), key: 'rtf', width: 78,
+          render: row => (row.elapsed != null && row.duration ? (row.elapsed / row.duration).toFixed(3) : '-'),
         },
         { title: t('col.createdAt'), key: 'created_at', width: 170, render: row => fmtDate(row.created_at) },
         {

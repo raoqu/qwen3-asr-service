@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   progress    REAL NOT NULL DEFAULT 0,
   language    TEXT,
   wav_name    TEXT,
+  duration    REAL,
+  elapsed     REAL,
   result      TEXT,
   error       TEXT,
   created_at  TEXT NOT NULL,
@@ -42,12 +44,19 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_finished ON tasks(finished_at);
 """
 
+# v1→v2 增列（duration/elapsed）：存量库 CREATE TABLE IF NOT EXISTS 不会补列，启动时 ALTER 补齐
+_MIGRATIONS = (
+    ("duration", "ALTER TABLE tasks ADD COLUMN duration REAL"),
+    ("elapsed", "ALTER TABLE tasks ADD COLUMN elapsed REAL"),
+)
+
 # list_history / get_task 共用的摘要列（result 仅 get_task 单独取，避免列表查询拖大体积）
-_SUMMARY_COLS = "task_id, status, progress, language, wav_name, created_at, finished_at, error"
+_SUMMARY_COLS = ("task_id, status, progress, language, wav_name, "
+                 "duration, elapsed, created_at, finished_at, error")
 
 
 class TaskStore:
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self, db_path: str, retention_days: int = 7):
         self.db_path = db_path
@@ -63,12 +72,28 @@ class TaskStore:
         self._conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_DDL)
+        self._migrate()
         self._conn.execute(
             "INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', ?)",
             (str(self.SCHEMA_VERSION),),
         )
+        self._conn.execute(
+            "UPDATE meta SET value=? WHERE key='schema_version'",
+            (str(self.SCHEMA_VERSION),),
+        )
         self._conn.commit()
         logger.info(f"任务持久化已启用: {db_path}（retention={retention_days} 天）")
+
+    def _migrate(self) -> None:
+        """存量库增量补列（idempotent）：缺哪列补哪列，已存在则跳过。"""
+        try:
+            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(tasks)")}
+            for col, ddl in _MIGRATIONS:
+                if col not in cols:
+                    self._conn.execute(ddl)
+                    logger.info(f"任务库迁移：新增列 {col}")
+        except sqlite3.Error as e:
+            logger.warning(f"任务库迁移失败（不影响新库）: {e}")
 
     # ─── 写路径（TaskManager 钩子）───
 
@@ -134,9 +159,10 @@ class TaskStore:
             self._last_progress_write.pop(task["task_id"], None)
             affected = self._commit_write(
                 "UPDATE tasks SET status=?, progress=?, result=?, error=?,"
-                " updated_at=?, finished_at=? WHERE task_id=?",
+                " duration=?, elapsed=?, updated_at=?, finished_at=? WHERE task_id=?",
                 (task["status"], task.get("progress", 0.0), result_json,
-                 task.get("error"), datetime.now().isoformat(),
+                 task.get("error"), task.get("duration"), task.get("elapsed"),
+                 datetime.now().isoformat(),
                  task.get("finished_at"), task["task_id"]),
             )
         if affected == 0:

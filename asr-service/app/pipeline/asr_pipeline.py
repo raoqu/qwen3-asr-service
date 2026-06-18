@@ -119,6 +119,7 @@ class ASRPipeline:
                     "segments": [],
                     "full_text": "",
                     "language": language,
+                    "duration": round(duration, 2),
                     "align_enabled": self.asr.align_enabled,
                     "punc_enabled": self.punc is not None,
                 }
@@ -229,6 +230,7 @@ class ASRPipeline:
                 "segments": segments,
                 "full_text": full_text,
                 "language": language,
+                "duration": round(duration, 2),
                 "align_enabled": self.asr.align_enabled,
                 "punc_enabled": self.punc is not None,
             }

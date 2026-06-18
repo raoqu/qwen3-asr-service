@@ -22,6 +22,8 @@ class TaskListItem(BaseModel):
     progress: float
     language: str | None = None
     wav_name: str | None = None      # 原始文件名（展示用）
+    duration: float | None = None    # 音频时长（秒）
+    elapsed: float | None = None     # 识别耗时（秒，实际处理墙钟）
     created_at: str
     finished_at: str | None = None
     error: str | None = None

@@ -66,7 +66,7 @@ def test_list_tasks_summary_excludes_result_and_path(tm_factory):
     assert "file_path" not in item
     assert set(item.keys()) == {
         "task_id", "status", "progress", "language", "wav_name",
-        "created_at", "finished_at", "error",
+        "duration", "elapsed", "created_at", "finished_at", "error",
     }
 
 
