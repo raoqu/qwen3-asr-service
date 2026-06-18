@@ -15,7 +15,8 @@ from fastapi.testclient import TestClient
 
 def _args(**over):
     base = dict(
-        serve_mode="standard", device="cpu", model_size=None, enable_align=True,
+        serve_mode="standard", device="cpu", model_size=None, asr_backend="auto",
+        enable_align=True,
         enable_punc=False, model_source="modelscope", host=None, port=None,
         web=False, max_segment=5, api_key=None, max_queue_size=None,
     )

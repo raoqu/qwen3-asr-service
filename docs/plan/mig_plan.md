@@ -141,13 +141,24 @@
 - [ ] 设备路由：`device.py` 增加 Apple Silicon 分支（`auto` 在 mac+MLX 可用时选 `mlx`）。
 - **验收**：ASR-only RTF 从 ~0.18 降到 ~0.04–0.08；去除 `openvino` 依赖（保留为非 mac 平台后端）。
 
-### 阶段 C：说话人 embedding → MLX/Metal（P0/P1，1–2 周）
+### 阶段 C：说话人 embedding 加速（P0，**已完成 ✅，性能目标达成**）
 
-- [ ] 用 MLX 重写 CAM++（FCM + TDNN + StatsPool），权重从现有 `campplus_cn_common.bin` 转换（torch state_dict → MLX）。
-- [ ] **FBank 对齐**：用 MLX/Accelerate(vDSP) 复刻 `torchaudio.compliance.kaldi.fbank`（80 mel、25ms/10ms、dither=0）+ CMN，**与现实现数值对齐**（否则声纹库模板失效）。
-- [ ] 滑窗批处理：整段所有窗一次性堆叠上 GPU。
-- [ ] 声纹库兼容：若 embedding 与旧模板不能 bit 对齐 → 升 `SpeakerEmbeddingEngine.MODEL_TAG`，触发库重建（已有机制）。
-- **验收**：说话人 embedding RTF 从 ~0.11 降到 ~0.02；去除 `torch`/`torchaudio`。
+> 关键决策更新：原计划用 MLX 重写 CAM++（为同时拿性能 + 去 torch）。但探针实测
+> （`scripts/probe_speaker_backend.py`）发现 **PyTorch MPS（Metal）方案以极低风险拿到了
+> 全部性能收益**，故性能目标用 MPS 达成；MLX 重写降级为"去 torch 依赖"才需要的可选项（并入 Stage D）。
+
+**实测（RAG_08min，619 窗，M3 Ultra）**：
+
+| 后端 | CAM++ 前向 | 加速 | 与 CPU embedding 数值一致性 |
+|---|---:|---:|---|
+| CPU（原） | 57.34s | 1× | — |
+| **PyTorch MPS（Metal）** | **2.11s** | **27.2×** | **cosine=1.000000，max\|Δ\|=9.9e-7** |
+
+- [x] **CAM++ 走 MPS**：`SpeakerEmbeddingEngine` 增加 `device`（auto：Apple Silicon→mps），模型与特征搬到 Metal。
+- [x] **零声纹库风险**：embedding 与 CPU **数值一致**（CAM++ 是纯 PyTorch，仅算子换 Metal 执行），故 **`MODEL_TAG` 不变、无需重建声纹库**——彻底规避原计划最大风险点（FBank 对齐）。
+- [x] **回归通过**：全量单测 882 passed。
+- **已达成验收**：说话人 embedding RTF ~0.12 → ~0.004；**端到端（MLX ASR + MPS 说话人）：yuanzhuo 0.325→0.076（4.27×）、RAG 0.32→0.070（4.60×）**，命中本计划 ~0.07–0.10 目标。
+- **遗留（移交 Stage D）**：MPS 仍依赖 `torch`/`torchaudio`。若要彻底去 torch，再用 MLX 重写 CAM++ + FBank（届时才面对 FBank 对齐风险）；性能上 MPS 已足够，故此项纯为"砍依赖"，非性能项。
 
 ### 阶段 D：砍依赖（P2，标点 / VAD / 聚类，1–2 周）
 
@@ -191,4 +202,8 @@
 
 ## 附：一句话结论
 
-> 把 **ASR（57%）和说话人 embedding（35%）这两块迁到 MLX/Metal**，预计端到端 RTF 从 **0.319 降到 ~0.07–0.10（约 3–5×）**；再把标点/VAD/聚类去 FunASR/Torch/scipy，最终可收敛到 **`mlx + numpy + soundfile`** 乃至**纯 C++ 自包含二进制**，同时实现"更快"与"更易部署"两个目标。ASR 已有成熟 MLX 参考实现，风险可控；最大工程难点是**声纹 FBank/embedding 的数值对齐**。
+> **性能目标已达成（Stage A–C 完成）**：ASR 迁 **MLX(Metal)**、说话人 embedding 迁 **PyTorch MPS(Metal)**，端到端 RTF 从 **0.32 降到 ~0.07（实测 4.3–4.6×）**，文本/说话人结果与原管线一致（CER 0.2–0.7%）。
+>
+> 关键经验：说话人这块**没走 MLX 重写**，而用 MPS——同样上 Metal，27× 提速且 embedding 与 CPU 数值一致，**零声纹库风险**，绕开了原计划最大难点（FBank 对齐）。
+>
+> **剩余（部署精简，P2/P3，非性能项）**：标点/VAD 去 FunASR、聚类去 scipy/sklearn、CAM++ 用 MLX 重写以去 torch，最终收敛到极简依赖乃至纯 C++ 自包含二进制——这部分追求"更易部署"，性能已不再是瓶颈。

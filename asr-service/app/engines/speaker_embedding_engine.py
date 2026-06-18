@@ -47,11 +47,28 @@ class SpeakerEmbeddingEngine:
     SAMPLE_RATE = 16000
     _BATCH = 64
 
-    def __init__(self):
+    def __init__(self, device: str = "auto"):
         self._model_key = "campplus"
         self._model = None
+        # device: "auto"(Apple Silicon→mps / CUDA→cuda / 否则 cpu) | "cpu" | "mps" | "cuda"
+        # MPS 实测较 CPU 提速 ~27×，且 embedding 与 CPU 数值一致（cos=1.0，max|Δ|<1e-6），
+        # 零声纹库兼容风险，故 MODEL_TAG 不变（见 docs/mig_plan.md Stage C）。
+        self._device_pref = device
+        self._device = "cpu"
         # 共享实例跨会话/跨任务调用，forward 串行化（ms 级，无瓶颈）
         self._infer_lock = threading.Lock()
+
+    def _resolve_device(self) -> str:
+        if self._device_pref in ("cpu", "mps", "cuda"):
+            return self._device_pref
+        try:
+            if torch.backends.mps.is_available():
+                return "mps"
+            if torch.cuda.is_available():
+                return "cuda"
+        except Exception:
+            pass
+        return "cpu"
 
     def load(self):
         local_dir = MODEL_LOCAL_MAP[self._model_key]
@@ -70,8 +87,10 @@ class SpeakerEmbeddingEngine:
         state = torch.load(weight_path, map_location="cpu", weights_only=True)
         model.load_state_dict(state)
         model.eval()
+        self._device = self._resolve_device()
+        model.to(self._device)
         self._model = model
-        logger.info(f"说话人 embedding 模型已加载 (PyTorch/CPU): {local_dir}")
+        logger.info(f"说话人 embedding 模型已加载 (PyTorch/{self._device}): {local_dir}")
 
     @staticmethod
     def _fbank(wav: torch.Tensor) -> torch.Tensor:
@@ -111,11 +130,12 @@ class SpeakerEmbeddingEngine:
         max_len = max(max(c.shape[0] for c in clips), 400)
         feats = torch.stack([self._fbank(self._circle_pad(c, max_len)) for c in clips])
 
+        feats = feats.to(self._device)
         outs = []
         with self._infer_lock, torch.no_grad():
             for i in range(0, len(feats), self._BATCH):
                 outs.append(self._model(feats[i:i + self._BATCH]))
-        return F.normalize(torch.cat(outs), dim=1).numpy()
+        return F.normalize(torch.cat(outs), dim=1).cpu().numpy()
 
     def embed_segment(self, wav: np.ndarray) -> np.ndarray:
         """整段提取：滑窗 embedding 均值 + 重归一化（实时侧 final 段用）。返回 [192]。"""
