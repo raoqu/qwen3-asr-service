@@ -149,8 +149,13 @@ body.dark .adv-field .lbl { color: #cbd5e1; }
 }
 body.dark .seg-time { color: #94a3b8; }
 .seg-text { flex: 1; line-height: 1.65; }
+.seg-actions { display: flex; align-items: flex-start; gap: 8px; }
 .seg-play { opacity: 0; color: var(--accent); padding-top: 4px; transition: opacity .12s ease; }
 .seg-row:hover .seg-play { opacity: 1; }
+.seg-copy { opacity: 0; color: var(--accent); cursor: pointer; padding-top: 4px; transition: opacity .12s ease, color .12s ease; }
+.seg-row:hover .seg-copy { opacity: 1; }
+.seg-copy:hover { color: #0d9488; }
+.seg-copy.copied { opacity: 1; color: #16a34a; }
 .full-text { white-space: pre-wrap; line-height: 1.75; }
 .json-pre {
   max-height: 380px; overflow: auto; padding: 12px; border-radius: 8px;

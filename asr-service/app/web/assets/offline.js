@@ -14,6 +14,7 @@
       'meta.speakers': '说话人: {0}', 'meta.duration': '时长: {0}s',
       'meta.on': '开启', 'meta.off': '关闭',
       'result.segments': '分段结果', 'result.noSegments': '无分段数据',
+      'seg.copy': '复制本句', 'seg.copied': '已复制',
       'result.fullText': '完整文本', 'result.rawJson': '原始 JSON', 'result.downloadJson': '下载 JSON',
       'spk.anonymous': '匿名说话人', 'spk.autoEnrolled': '自动登记（可在说话人管理页改名）',
       'spk.similarity': '声纹相似度 {0}',
@@ -68,6 +69,7 @@
       'meta.speakers': 'Speakers: {0}', 'meta.duration': 'Duration: {0}s',
       'meta.on': 'on', 'meta.off': 'off',
       'result.segments': 'Segments', 'result.noSegments': 'No segment data',
+      'seg.copy': 'Copy sentence', 'seg.copied': 'Copied',
       'result.fullText': 'Full text', 'result.rawJson': 'Raw JSON', 'result.downloadJson': 'Download JSON',
       'spk.anonymous': 'Anonymous speaker', 'spk.autoEnrolled': 'Auto-enrolled (rename on the Speakers page)',
       'spk.similarity': 'Voiceprint similarity {0}',
@@ -142,6 +144,29 @@
         URL.revokeObjectURL(a.href);
       }
       function seek(seg) { if (props.onSeek && seg.start != null) props.onSeek(seg); }
+      // 复制单句文本：成功后在该句按钮上短暂显示对勾反馈（不依赖 toast，历史查看也可用）
+      const copiedIdx = ref(-1);
+      let copiedTimer = null;
+      function markCopied(i) {
+        copiedIdx.value = i;
+        clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => { copiedIdx.value = -1; }, 1200);
+      }
+      function copySeg(seg, i) {
+        const text = seg.text || '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => markCopied(i)).catch(() => fallbackCopy(text, i));
+        } else {
+          fallbackCopy(text, i);
+        }
+      }
+      function fallbackCopy(text, i) {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try { document.execCommand('copy'); markCopied(i); } catch (e) { /* ignore */ }
+        document.body.removeChild(ta);
+      }
       // 声纹识别开启时 result.speakers 为映射表（含 score）；纯标签列表时为空映射
       const spkMeta = computed(() => {
         const map = {};
@@ -154,7 +179,7 @@
         if (m.auto_enrolled) return t('spk.autoEnrolled');
         return m.score != null ? t('spk.similarity', m.score.toFixed(2)) : '';
       }
-      return { result, segments, metaTags, jsonText, downloadJson, seek, fmtTime, spkIdx, spkTitle, t };
+      return { result, segments, metaTags, jsonText, downloadJson, seek, copySeg, copiedIdx, fmtTime, spkIdx, spkTitle, t };
     },
     template: `
       <div>
@@ -170,7 +195,10 @@
           <div v-for="(seg, i) in segments" :key="i" class="seg-row" :class="{ static: !onSeek }" @click="seek(seg)">
             <span class="seg-time">{{ fmtTime(seg.start) }}</span>
             <span class="seg-text"><span v-if="seg.speaker" class="speaker-badge" :class="'spk-' + spkIdx(seg.speaker)" :title="spkTitle(seg)">{{ seg.speaker_name || seg.speaker }}</span>{{ seg.text }}</span>
-            <span v-if="onSeek" class="seg-play"><a-icon name="play" size="14"></a-icon></span>
+            <span class="seg-actions">
+              <span class="seg-copy" :class="{ copied: copiedIdx === i }" @click.stop="copySeg(seg, i)" :title="copiedIdx === i ? t('seg.copied') : t('seg.copy')"><a-icon :name="copiedIdx === i ? 'check' : 'copy'" size="14"></a-icon></span>
+              <span v-if="onSeek" class="seg-play"><a-icon name="play" size="14"></a-icon></span>
+            </span>
           </div>
         </div>
         <n-collapse :default-expanded-names="['full']" style="margin-top:18px;">
