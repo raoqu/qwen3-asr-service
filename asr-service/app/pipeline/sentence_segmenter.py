@@ -341,9 +341,13 @@ def _is_english_period_end(text, i):
     if i == 0:
         return False
     prev = text[i - 1]
+    nxt = text[i + 1] if i + 1 < len(text) else ""
+    if prev in _CLAUSE_PUNCT:
+        # 标点簇 "，." / ",." ：标点恢复模型在子句逗号后又叠加句点，仍按句末判定
+        # （受后随字符约束：句末/空白/大写起句/中文起句），避免把两句错并成一句。
+        return nxt == "" or nxt.isspace() or nxt.isupper() or _is_cjk(nxt)
     if not prev.isalnum():
         return False                       # .env / 连续标点 / 句点前是空白
-    nxt = text[i + 1] if i + 1 < len(text) else ""
     if prev.isdigit() and nxt.isdigit():
         return False                       # 小数 3.14
     # 单字母缩写保护（e.g. / i.e.）：句点前紧邻字母串长度为 1

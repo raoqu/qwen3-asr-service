@@ -137,6 +137,22 @@ def test_english_period_protects_decimal_and_dotfile_and_abbrev():
     assert _is_english_period_end("e.g. yes", 1) is False   # 单字母缩写
 
 
+def test_comma_period_cluster_splits():
+    # 标点恢复模型常在子句逗号后再叠加句点（",." / "，."），仍应按句末切开，
+    # 避免后一句被错并进前一句（导致其时间戳落到更早的段）。
+    assert _is_english_period_end("Scratch,. And", 8) is True   # ",." + 大写起句
+    assert _is_english_period_end("好的，.然后", 3) is True       # "，." + 中文起句
+    assert _is_english_period_end("a,.b", 2) is False            # 后随小写：非句末
+    chunk = {"start": 0.0, "end": 4.0,
+             "text": "This is CS three thirty six,. And this is our the core staff. So I'm Percy."}
+    segs = segment_sentences([chunk])
+    assert [s["text"] for s in segs] == [
+        "This is CS three thirty six,.",
+        " And this is our the core staff.",
+        " So I'm Percy.",
+    ]
+
+
 # ─── 无词级时间戳：比例估时 + 内部标点仍切 ────────────────────────────
 
 def test_no_words_proportional_timing_and_internal_split():

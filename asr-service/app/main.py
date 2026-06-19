@@ -286,7 +286,9 @@ def _assemble_standard(app: FastAPI, args) -> None:
     asr_backend = resolve_asr_backend(args.asr_backend, is_cpu)
     if asr_backend == "mlx":
         from app.engines.mlx_asr_engine import MLXASREngine
-        asr_engine = MLXASREngine(model_size=model_size)
+        # MLX 对齐跑 Metal GPU，不受 should_disable_align（面向 CUDA 显存）约束，
+        # 直接采用用户配置 args.enable_align。
+        asr_engine = MLXASREngine(model_size=model_size, enable_align=args.enable_align)
     elif asr_backend == "openvino":
         from app.engines.openvino_asr_engine import OpenVINOASREngine
         asr_engine = OpenVINOASREngine(model_size=model_size)

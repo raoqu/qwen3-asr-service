@@ -50,11 +50,14 @@ class MLXASREngine:
 
     BACKEND = "mlx"
 
-    def __init__(self, model_size: str = "0.6b", dtype: str = "float16"):
+    def __init__(self, model_size: str = "0.6b", dtype: str = "float16",
+                 enable_align: bool = True):
         self._model_size = model_size
         self._dtype = dtype
+        self._enable_align = enable_align
         self._model = None
         self._config = None
+        self._aligner = None
         self._M = None
         # MLX 的 Stream/计算上下文是线程局部的，且 mlx-qwen3-asr 在加载时即捕获 GPU
         # stream——模型必须在「加载它的那个线程」上推理，否则报
@@ -92,12 +95,37 @@ class MLXASREngine:
         self._model, self._config = M.load_model(repo, dtype=dt)
         logger.info(f"MLX ASR 模型已加载: size={self._model_size}, device=mlx/metal")
 
+        # 可选加载 ForcedAligner（产词级时间戳）。必须与 ASR 模型同在本专用线程上
+        # 创建/调用（MLX Stream 线程亲和性，见 __init__）。失败则降级为无对齐。
+        if self._enable_align:
+            try:
+                from app.config import MODEL_LOCAL_MAP, MODEL_REPO_MAP, MODEL_SOURCE
+                from app.utils.model_manager import ensure_model
+                aligner_local = MODEL_LOCAL_MAP["aligner"]
+                source = MODEL_SOURCE if MODEL_SOURCE in MODEL_REPO_MAP else "modelscope"
+                aligner_repo = MODEL_REPO_MAP[source]["aligner"]
+                # 与 QwenASREngine 一致：按 MODEL_SOURCE（默认 modelscope，国内快）下载到本地
+                # 目录，再让 mlx ForcedAligner 直接从本地目录加载——绕开 HF，且支持手动放置。
+                # （目录非空即跳过下载；MODEL_SOURCE=manual 时要求用户自行放置后重启。）
+                ensure_model(aligner_repo, aligner_local)
+                logger.info(f"开始加载 MLX ForcedAligner（词级时间戳）: {aligner_local}")
+                self._aligner = M.ForcedAligner(model_path=aligner_local, dtype=dt)
+                logger.info("MLX ForcedAligner 已加载")
+            except Exception as e:
+                logger.warning(f"ForcedAligner 加载失败，降级为无对齐模式: {e}")
+                self._aligner = None
+                self._enable_align = False
+
     def transcribe(
         self,
         audio_path: str,
         language: str | None = None,
     ) -> list[dict]:
-        """对单个音频文件执行 ASR 识别。返回 [{"text": str}]（与 OpenVINO 引擎一致）。"""
+        """对单个音频文件执行 ASR 识别。
+
+        返回 [{"text": str, "words": [...] | 缺省}]：开启对齐时附带词级时间戳
+        （start/end 为相对本段音频起点的秒，由 result_parser.extract_words 加 offset）。
+        """
         if self._model is None:
             raise RuntimeError("ASR 模型未加载，请先调用 load()")
 
@@ -105,10 +133,26 @@ class MLXASREngine:
 
         def _run():
             res = self._M.transcribe(
-                audio_path, model=self._model, language=lang, diarize=False)
-            return [{"text": (res.text or "").strip()}]
+                audio_path, model=self._model, language=lang, diarize=False,
+                return_timestamps=self._enable_align,
+                forced_aligner=self._aligner)
+            return [self._pack(res)]
 
         return self._executor.submit(_run).result()
+
+    def _pack(self, res) -> dict:
+        """把 mlx TranscriptionResult 打包为引擎统一返回结构。"""
+        out = {"text": (res.text or "").strip()}
+        if self._enable_align:
+            words = [
+                {"text": s.get("text") or "", "start": s["start"], "end": s["end"]}
+                for s in (res.segments or [])
+                if s.get("start") is not None and s.get("end") is not None
+                and (s.get("text") or "").strip()
+            ]
+            if words:
+                out["words"] = words
+        return out
 
     def transcribe_array(
         self,
@@ -153,6 +197,7 @@ class MLXASREngine:
         def _clear():
             self._model = None
             self._config = None
+            self._aligner = None
         try:
             self._executor.submit(_clear).result()
         finally:
@@ -165,5 +210,6 @@ class MLXASREngine:
 
     @property
     def align_enabled(self) -> bool:
-        # 与 OpenVINO 引擎一致：当前不产出词级时间戳（如需可后续接入 mlx forced_aligner）
-        return False
+        # 接入 mlx-qwen3-asr 内置 ForcedAligner：开启后离线 transcribe 产词级时间戳。
+        # 加载失败会在 _load_impl 中降级置 False。
+        return self._enable_align
