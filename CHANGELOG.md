@@ -3,6 +3,11 @@
 本项目所有重要变更记录于此。版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)，
 发布版本号经由 git tag（去掉 `v` 前缀）注入镜像 `APP_VERSION`，体现在 `/openapi.json` 的 `info.version`。
 
+## [Unreleased]
+
+### 修复
+- **语言提示归一化（原生端点）**：原生离线 `/v2/asr` 与实时 `/v2/asr/stream` 现统一把上游 `language` 归一为引擎语种名——接受 ISO-639-1 码（`zh`）、规范英文名（`Chinese`）、带地区子标签（`zh-CN`），无法识别的取值降级为自动检测。修复客户端传 `zh` 时透传到引擎抛 `Unsupported language: Zh`、导致**实时逐句报 `feed_failed` 零文本 / 离线任务失败**的问题（兼容层早有此归一，原生端点此前漏做）。归一化逻辑下沉至中立的 `app/utils/language.py`，离线与实时共用，兼容层 `mappers.to_engine_language` 改为 re-export。
+
 ## [2.2.0] - 2026-06-19
 
 句子级准确分句能力（贡献者 PR #22「准确分句 + 修复处理切块边界重复识别」），叠加维护者评审修复。
