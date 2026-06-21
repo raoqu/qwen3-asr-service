@@ -85,6 +85,51 @@ async def test_stream_silence_scene_on_quiet_audio():
         ex.shutdown()
 
 
+async def test_final_attaches_scene_from_window_log():
+    # 喂音频累积窗级日志后，final 段聚合出 scene + scene_scores（per-seg，同离线）
+    s, ex = _session(SceneTagger("Singing"), enter=0.0)
+    try:
+        await _collect(s.feed_audio(_pcm_ms(2000)))
+        assert s._scene_window_log                       # 已留存窗级分数
+        msg = {}
+        s._attach_scene(msg, 0, 2000, "在唱歌")
+        assert msg["scene"] == "singing" and msg["scene_scores"]
+    finally:
+        ex.shutdown()
+
+
+async def test_final_scene_lyrics_recovers_singing_from_music():
+    # 带伴奏歌声：模型给 Music、无 Singing，靠歌词文本救回 singing
+    s, ex = _session(SceneTagger("Music"), enter=0.0)
+    try:
+        await _collect(s.feed_audio(_pcm_ms(2000)))
+        msg = {}
+        s._attach_scene(msg, 0, 2000, "流浪日子你再伴随")     # 有歌词 → singing
+        assert msg["scene"] == "singing"
+    finally:
+        ex.shutdown()
+    s2, ex2 = _session(SceneTagger("Music"), enter=0.0)       # 无文本(纯器乐) → 保持 music
+    try:
+        await _collect(s2.feed_audio(_pcm_ms(2000)))
+        msg2 = {}
+        s2._attach_scene(msg2, 0, 2000, "")
+        assert msg2["scene"] == "music"
+    finally:
+        ex2.shutdown()
+
+
+async def test_start_scene_preset_overrides_session():
+    # start 消息 scene_preset 按会话覆盖判定权重（music 预设关人声优先）
+    s, ex = _session(SceneTagger("Speech"), enter=0.0)
+    try:
+        s.configure({"audio_fs": 16000, "scene_preset": "music"})
+        assert s._scene_vocal_priority is False
+        s.configure({"audio_fs": 16000, "scene_preset": "live"})
+        assert s._scene_vocal_priority is True and s._scene_singing_bias > 0
+    finally:
+        ex.shutdown()
+
+
 async def test_stream_no_scene_when_disabled():
     s, ex = _session(SceneTagger(), scene_enable=False, enter=0.0)
     try:

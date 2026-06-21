@@ -13,7 +13,7 @@
 - **段级场景重叠加权聚合**：段内各打标窗按其与该段的时间重叠比例加权后再判定/求 `scene_scores`，修复「说话结束后背景音乐恢复」被 ~1s 全局窗横跨、整窗拉高 `music` 的污染（短段尤甚）。
 - **可调每桶权重** `scene_weights`（配置文件 dict，如 `{music: 0.8, speech: 1.1}`）：同时作用于场景判定与 `scene_scores`，背景音乐易盖过说话时可下调 `music`。
 - **文本感知歌声修正**（离线）：PANNs 对「带伴奏的歌声」常只输出 `Music`、不给 `Singing`（演唱桶分接近零）。利用 ASR 已转写出歌词＝确有人声这一事实，对有歌词的段：`speech` 分 ≥ `--scene-speech-min`（默认 0.30）判说话，否则有伴奏判 `singing`——救回被识别成 music 的演唱段。`--no-scene-lyrics-aware` 可关闭。
-- **实时场景推送**：`/v2/asr/stream` WebSocket 推送 `scene` 消息（迟滞平滑，状态切换时发出）。
+- **实时场景推送**：`/v2/asr/stream` WebSocket 的 `scene` 消息（迟滞平滑，仅状态切换时发出，连续状态只发一次）；并在每条 `final` 句级结果上附 `scene` / `scene_scores`（逐句场景，与离线一致，复用窗级打标不额外占 GPU）。
 - **新增标注端点**：`POST /v2/audio/tag`（仅标注，不做转写）。
 - **双引擎**：PANNs（推荐，16k / 32k 变体）与 YAMNet（轻量备选，可选依赖，vLLM 模式不可用）。
 - **可配置场景映射** `--scene-map-file`；新增 `THIRD_PARTY_NOTICES.md`。

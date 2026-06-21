@@ -379,12 +379,3 @@ body.dark .scene-other   { color: #fbbf24; }
 .event-span { font-size: .8em; color: #64748b; font-variant-numeric: tabular-nums; white-space: nowrap; }
 body.dark .event-span { color: #94a3b8; }
 .event-conf { margin-left: auto; font-size: .78em; color: #94a3b8; font-variant-numeric: tabular-nums; }
-
-/* 实时当前场景实况条 */
-.scene-live { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 12px;
-  border-radius: 8px; background: rgba(20, 184, 166, .06); }
-body.dark .scene-live { background: rgba(255, 255, 255, .03); }
-.scene-live .scene-badge { font-size: .82em; margin-right: 0; }
-.scene-live .lbl { font-size: .8em; color: #64748b; }
-body.dark .scene-live .lbl { color: #94a3b8; }
-.scene-live .conf { margin-left: auto; font-size: .82em; color: #94a3b8; font-variant-numeric: tabular-nums; }

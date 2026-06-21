@@ -196,8 +196,8 @@ WS /v2/asr/stream
 |------|------|------|
 | `session.created` | `protocol`("qwen3-asr-stream") / `protocol_version`("1.0") / `mode` / `backend` / `sample_rate` / `capabilities` / `limits` | 连接建立即下发；`capabilities` 含 `partial_results` / `word_timestamps` / `languages_auto` / `speaker_labels` / `speaker_identification` / `scene`（实时场景通知是否下发），以及可调声明 `noise_filter_tunable` / `speaker_tunable` / `endpoint_tunable` / `output_toggles`（标示对应覆盖项本会话是否可调）；`limits` 含 `max_frame_bytes` / `max_backlog_bytes`，超实时推流的客户端应据此控速（参考 `final.end` 反馈的处理进度，保持未处理积压低于上限） |
 | `partial` | `seg_id` / `text` | 中间结果（仅 `partial_results=true` 的后端，vad-offline 不产生） |
-| `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` | 句级定稿结果；`start`/`end` 为毫秒；`words` 仅 `word_timestamps=true` 时存在；`speaker`（匿名标签 A/B/C…）仅 `speaker_labels=true` 且本段可判定时存在；`speaker_name` 仅 `identify_speakers=true` 且声纹命中时存在（说话人标签 / 真名语义见[说话人管理](speakers.md#说话人分离与声纹识别)） |
-| `scene` | `label` / `confidence` / `since` / `scores` | 场景状态切换通知（仅 `capabilities.stream.scene=true` 时下发）：`label` 当前场景；`since` 该场景状态的起始时间戳（毫秒）；`scores` 各内容桶的代表性得分。仅在状态**发生变化**时推送（带迟滞平滑），不逐窗下发 |
+| `final` | `seg_id` / `text` / `start` / `end` / `words` / `speaker` / `speaker_name` / `scene` / `scene_scores` | 句级定稿结果；`start`/`end` 为毫秒；`words` 仅 `word_timestamps=true` 时存在；`speaker`（匿名标签 A/B/C…）仅 `speaker_labels=true` 且本段可判定时存在；`speaker_name` 仅 `identify_speakers=true` 且声纹命中时存在；`scene`（该段主场景）/`scene_scores`（各桶概率分布）仅 `capabilities.stream.scene=true` 时存在，语义同离线 `segments[].scene` / `scene_scores` |
+| `scene` | `label` / `confidence` / `since` / `scores` | 场景状态切换通知（仅 `capabilities.stream.scene=true` 时下发）：`label` 当前场景；`since` 该场景状态的起始时间戳（毫秒）；`scores` 各内容桶的代表性得分。仅在状态**发生变化**时推送（带迟滞平滑，连续状态只发一次）；逐句场景见 `final.scene` |
 | `error` | `code` / `message` / `seg_id` / `fatal` | `fatal=true` 后会话终止 |
 | `session.closed` | `reason` | 会话结束 |
 

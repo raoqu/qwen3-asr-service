@@ -134,6 +134,7 @@ class StreamSession:
         self._scene_weights = scene_weights
         self._scene_map = scene_map              # 自定义场景映射（None = 内置默认）
         self._tag_topk = tag_topk
+        self._tag_interval_ms = tag_interval_ms
         self._scene_step = max(1, int(_TARGET_SR * max(1, tag_interval_ms) / 1000))
         self._scene_chunks: list[np.ndarray] = []   # 独立于 buffer（buffer 会被 final/idle 裁剪）
         self._scene_samples = 0
@@ -196,6 +197,7 @@ class StreamSession:
         self._noise_tracker = NoiseFloorTracker() if self._noise_filter else None
         self._scene_chunks = []
         self._scene_samples = 0
+        self._scene_window_log = []   # [(start_ms, end_ms, scores, dbfs)]：供 final 段聚合 per-seg scene
         self._scene_smoother = (
             SceneSmoother(self._scene_enter_sec, self._scene_exit_sec)
             if self._scene_enable else None)
@@ -256,6 +258,12 @@ class StreamSession:
         self._with_punc = parse_bool(cfg_msg.get("with_punc"), self._with_punc, "with_punc")
         self._with_words = parse_bool(cfg_msg.get("with_words"), self._with_words, "with_words")
         self._with_diarize = parse_bool(cfg_msg.get("diarize"), self._with_diarize, "diarize")
+        sp = cfg_msg.get("scene_preset")
+        if sp is not None:
+            p = scene_mapper.resolve_preset(sp)   # 未知名回退默认；按会话覆盖判定权重
+            self._scene_vocal_priority = p["vocal_priority"]
+            self._scene_singing_min = p["singing_min"]
+            self._scene_singing_bias = p["singing_bias"]
 
     def _collect_ignored_params(self, cfg_msg: dict) -> list[str]:
         """合法但因服务端未启用对应功能而无法生效的参数（软提示，不报错）。"""
@@ -430,8 +438,43 @@ class StreamSession:
             msg["speaker"] = spk
         if spk_name is not None:
             msg["speaker_name"] = spk_name
+        # per-seg scene（与离线同款：重叠加权聚合 + 文本感知歌声修正），复用已留存的窗级分数
+        if self._scene_enable and self._scene_window_log:
+            self._attach_scene(msg, start_ms, end_ms, text)
         self.seg_id += 1
         yield msg
+
+    def _attach_scene(self, msg, start_ms, end_ms, text):
+        """聚合落在本段时间窗内的留存窗级分数 → scene + scene_scores 挂到 final 信封。
+
+        与离线 _run_tagging 同款：窗按与段的时间重叠加权 → classify_buckets → 文本感知修正。
+        留存日志中早于本段的窗在此一并清除（每段消费一次，单调推进）。
+        """
+        sc_list, ov_list, dbfs_acc = [], [], 0.0
+        for (ws, we, scores, dbfs) in self._scene_window_log:
+            ov = min(we, end_ms) - max(ws, start_ms)
+            if ov > 0:
+                sc_list.append(scores)
+                ov_list.append(ov)
+                dbfs_acc += dbfs * ov
+        # 清除已落在本段结束之前的窗（不再被后续段需要）
+        self._scene_window_log = [w for w in self._scene_window_log if w[1] > end_ms]
+        if not sc_list:
+            return
+        bs = scene_mapper.mean_bucket_scores(
+            sc_list, self._scene_map, weights=self._scene_weights, window_weights=ov_list)
+        seg_dbfs = dbfs_acc / (sum(ov_list) or 1.0)
+        label, _ = scene_mapper.classify_buckets(
+            bs, seg_dbfs, silence_dbfs=self._scene_silence_dbfs,
+            vocal_priority=self._scene_vocal_priority,
+            singing_min=self._scene_singing_min, singing_bias=self._scene_singing_bias)
+        if cfg.SCENE_LYRICS_AWARE:
+            txt = (text or "").strip()
+            has_text = bool(txt) and txt != "[识别失败]"
+            label = scene_mapper.refine_scene_with_text(
+                label, bs, has_text, speech_min=cfg.SCENE_SPEECH_MIN)
+        msg["scene"] = label
+        msg["scene_scores"] = bs
 
     def _lookup_speaker_name(self, spk: str) -> str | None:
         """会话级簇缓存的声纹查询（同步，线程池内执行）。
@@ -489,6 +532,11 @@ class StreamSession:
         except Exception as e:
             logger.warning(f"[stream] 场景打标失败，跳过: {e}")
             return
+        # 留存窗级分数供 final 段聚合（per-seg scene）；复用本次推理，不额外占 GPU
+        self._scene_window_log.append(
+            (int(ts_ms - self._tag_interval_ms), int(ts_ms), tr.scores, rms_dbfs(window)))
+        if len(self._scene_window_log) > 240:           # 上限 ~4min，防长会话无界增长
+            self._scene_window_log = self._scene_window_log[-240:]
         changed = self._scene_smoother.update(scene, conf, ts_ms)
         if changed is not None:
             logger.info(f"[stream] scene → {changed} since={self._scene_smoother.since_ms} "
