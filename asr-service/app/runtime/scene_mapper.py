@@ -11,6 +11,9 @@ from __future__ import annotations
 
 SCENE_SILENCE = "silence"
 SCENE_OTHER = "other"
+SCENE_MUSIC = "music"
+SCENE_SINGING = "singing"
+SCENE_SPEECH = "speech"
 
 # 默认 5 桶通用集：bucket -> AudioSet display_name 成员（须与 audioset_labels.csv 逐字一致）
 DEFAULT_SCENE_MAP: dict[str, list[str]] = {
@@ -29,6 +32,25 @@ DEFAULT_SCENE_MAP: dict[str, list[str]] = {
 
 # 桶判定的最低主导概率：最高桶得分低于此则归 other（防把环境噪声误标成 speech）
 SCENE_MIN_SCORE = 0.10
+# 演唱判定阈值：详见 config.SCENE_SINGING_MIN
+SCENE_SINGING_MIN = 0.10
+
+# 场景判定预设：打包好的权重，供部署/按请求选择（WebUI 下拉）。详见 config.SCENE_PRESET。
+# - vocal_priority: 人声优先——说话/演唱只要达阈值就压过背景音乐（music 降为纯器乐兜底）；
+#   关闭则回退「桶间 argmax + 演唱特例」（背景音乐更易占主导，适合音乐内容分析）。
+# - singing_min: 演唱判定阈值。
+# - singing_bias: 清唱偏置——演唱与说话竞争时给演唱加的分（利于无伴奏清唱判为演唱）。
+SCENE_PRESETS: dict[str, dict] = {
+    "balanced": {"vocal_priority": True, "singing_min": 0.10, "singing_bias": 0.0},
+    "live":     {"vocal_priority": True, "singing_min": 0.08, "singing_bias": 0.10},
+    "music":    {"vocal_priority": False, "singing_min": 0.10, "singing_bias": 0.0},
+}
+SCENE_DEFAULT_PRESET = "balanced"
+
+
+def resolve_preset(name: str | None) -> dict:
+    """预设名 → 权重 dict（未知名回退默认预设）。"""
+    return SCENE_PRESETS.get(name or SCENE_DEFAULT_PRESET, SCENE_PRESETS[SCENE_DEFAULT_PRESET])
 
 
 def load_scene_map(path: str) -> dict[str, list[str]]:
@@ -57,22 +79,51 @@ def load_scene_map(path: str) -> dict[str, list[str]]:
 def classify_window(scores: dict[str, float], dbfs: float | None,
                     scene_map: dict[str, list[str]] | None = None,
                     silence_dbfs: float = -50.0,
-                    min_score: float = SCENE_MIN_SCORE) -> tuple[str, float]:
+                    min_score: float = SCENE_MIN_SCORE,
+                    vocal_priority: bool = True,
+                    singing_min: float = SCENE_SINGING_MIN,
+                    singing_bias: float = 0.0) -> tuple[str, float]:
     """单窗 → (scene_label, confidence)。
 
-    优先级：能量低于 silence_dbfs → silence；否则取得分最高的桶（桶得分=成员概率最大值）；
-    最高桶得分 < min_score → other。
+    桶得分 = 该桶成员概率的最大值。先判静音，再按 vocal_priority 决定内容场景：
+
+    - 静音：能量低于 silence_dbfs **且** 无明确内容信号（最高桶得分 < min_score）才判 silence。
+      不无条件以能量判静音——短促/轻声台词会被打标窗（≈1s）RMS 稀释到底噪，但语音分仍高。
+    - vocal_priority=True（人声优先）：说话/演唱只要达阈值就压过背景音乐——主播开 BGM 说话→
+      speech、演唱→singing，纯器乐才落 music。speech 与 singing 并存时按
+      (singing + singing_bias) 与 speech 比较决出（bias 偏向演唱，利于无伴奏清唱）。
+    - vocal_priority=False：桶间 argmax；若 music 占优但演唱桶 ≥ singing_min 则改判 singing
+      （背景音乐更易占主导，适合音乐内容分析场景）。
+    最高桶得分 < min_score → other（兜底）。
     """
-    if dbfs is not None and dbfs < silence_dbfs:
-        return SCENE_SILENCE, 1.0
     smap = scene_map or DEFAULT_SCENE_MAP
+    bucket_score = {b: max((scores.get(m, 0.0) for m in members), default=0.0)
+                    for b, members in smap.items()}
     best_bucket, best_score = SCENE_OTHER, 0.0
-    for bucket, members in smap.items():
-        s = max((scores.get(m, 0.0) for m in members), default=0.0)
+    for bucket, s in bucket_score.items():
         if s > best_score:
             best_bucket, best_score = bucket, s
+
+    if dbfs is not None and dbfs < silence_dbfs and best_score < min_score:
+        return SCENE_SILENCE, 1.0
     if best_score < min_score:
         return SCENE_OTHER, float(best_score)
+
+    speech = bucket_score.get(SCENE_SPEECH, 0.0)
+    sing = bucket_score.get(SCENE_SINGING, 0.0)
+
+    if vocal_priority:
+        speech_ok = speech >= min_score
+        singing_ok = sing >= singing_min
+        if singing_ok and (not speech_ok or sing + singing_bias >= speech):
+            return SCENE_SINGING, float(sing)
+        if speech_ok:
+            return SCENE_SPEECH, float(speech)
+        # 无人声 → 落到最高桶（纯器乐→music，或自定义非人声桶）
+        return best_bucket, float(best_score)
+
+    if best_bucket == SCENE_MUSIC and sing >= singing_min:
+        return SCENE_SINGING, float(sing)
     return best_bucket, float(best_score)
 
 

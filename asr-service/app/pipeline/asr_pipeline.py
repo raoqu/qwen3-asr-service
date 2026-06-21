@@ -228,7 +228,8 @@ class ASRPipeline:
             if tagging_active:
                 try:
                     audio_events = self._run_tagging(
-                        wav_path, segments, scene_enable=cfg.SCENE_ENABLE)
+                        wav_path, segments, scene_enable=cfg.SCENE_ENABLE,
+                        scene_preset=opts.get("scene_preset"))
                 except Exception as e:
                     logger.warning(f"音频标注失败，跳过: {e}")
                     audio_events = None
@@ -424,7 +425,7 @@ class ASRPipeline:
         return DiarizationResult(windows, labels, embeddings)
 
     def _run_tagging(self, wav_path: str, segments: list[dict],
-                     scene_enable: bool = True) -> list[dict]:
+                     scene_enable: bool = True, scene_preset: str | None = None) -> list[dict]:
         """通用音频打标：非重叠滑窗 predict_window → audio_events 事件段 + per-seg scene。
 
         复用阶段0已保证的 16k 单声道 wav；逐窗 top-k 经 onset/offset 聚合成事件段
@@ -446,12 +447,23 @@ class ASRPipeline:
         # per-segment scene：对每个 ASR 句，用其时间窗内各窗 scene 投票
         if scene_enable and windows:
             silence_dbfs = cfg.SCENE_SILENCE_DBFS
+            # per-request 预设覆盖服务端默认（缺省=服务端生效权重）
+            if scene_preset:
+                _p = scene_mapper.resolve_preset(scene_preset)
+                vocal_priority, singing_min, singing_bias = (
+                    _p["vocal_priority"], _p["singing_min"], _p["singing_bias"])
+            else:
+                vocal_priority = cfg.SCENE_VOCAL_PRIORITY
+                singing_min = cfg.SCENE_SINGING_MIN
+                singing_bias = cfg.SCENE_SINGING_BIAS
             for s in segments:
                 s_start = int(s["start"] * 1000)
                 s_end = int(s["end"] * 1000)
                 overlap = [
-                    scene_mapper.classify_window(scores, dbfs, scene_map=self._scene_map,
-                                                 silence_dbfs=silence_dbfs)
+                    scene_mapper.classify_window(
+                        scores, dbfs, scene_map=self._scene_map, silence_dbfs=silence_dbfs,
+                        vocal_priority=vocal_priority, singing_min=singing_min,
+                        singing_bias=singing_bias)
                     for (ws, we, _top, scores, dbfs) in windows
                     if we > s_start and ws < s_end
                 ]

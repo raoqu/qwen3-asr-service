@@ -78,7 +78,11 @@ enable_audio_tagging: false   # 总开关；关闭时零侵入、不加载引擎
 # scene_map_file: ""               # 自定义场景映射 yaml/json 路径（缺省=内置 5 桶通用集）
 # scene_enter_sec: 2.0             # 迟滞（流式）：连续 N 秒才进入某场景
 # scene_exit_sec: 2.0              # 迟滞（流式）：连续 M 秒才退出当前场景
-# scene_silence_dbfs: -50.0        # 静音判定能量底（dBFS）
+# scene_silence_dbfs: -50.0        # 静音判定能量底（dBFS）；仅在无明确语音/演唱时才据此判静音
+# scene_preset: balanced           # 场景判定预设：balanced(均衡,人声优先) | live(直播,人声优先+清唱偏置) | music(音乐优先)
+#                                  #（直播主播开 BGM 说话→说话、演唱→演唱：选 live；可在 WebUI 下拉/按请求 scene_preset 覆盖）
+# scene_singing_min: 0.10          # 演唱判定阈值（覆盖预设；留空=随预设）
+# scene_singing_bias: 0.0          # 清唱偏置（覆盖预设；留空=随预设）：演唱与说话竞争时给演唱加的分
 
 # ── 兼容接口（/compat/*，drop-in 对接 OpenAI/DashScope 客户端，默认关）──
 # 实时 WS 兼容（OpenAI Realtime / DashScope Paraformer realtime）随对应开关 + enable_stream 自动挂载；

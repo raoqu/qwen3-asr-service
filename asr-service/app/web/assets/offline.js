@@ -28,6 +28,9 @@
       'upload.identify': '声纹识别（标注真名，未知说话人自动登记）',
       'upload.tagOnly': '仅标注（不转写）', 'upload.tagScene': '包含场景时间线',
       'action.tagging': '标注中…', 'action.tag': '开始标注',
+      'scene.preset': '场景预设',
+      'preset.balanced': '均衡（人声优先）', 'preset.live': '直播（人声优先+清唱偏置）',
+      'preset.music': '音乐优先',
       // 高级设置（可选按请求覆盖）
       'adv.title': '高级设置（可选覆盖）',
       'adv.hint': '留空＝用服务端默认；关闭开关＝本次不执行该步骤。',
@@ -86,6 +89,9 @@
       'upload.identify': 'Speaker identification (label real names, auto-enroll unknowns)',
       'upload.tagOnly': 'Tag only (no transcription)', 'upload.tagScene': 'Include scene timeline',
       'action.tagging': 'Tagging…', 'action.tag': 'Start tagging',
+      'scene.preset': 'Scene preset',
+      'preset.balanced': 'Balanced (vocal-priority)', 'preset.live': 'Live (vocal + a-cappella bias)',
+      'preset.music': 'Music-first',
       'adv.title': 'Advanced (optional overrides)',
       'adv.hint': 'Empty = server default; turning a switch off skips that step for this request.',
       'adv.output': 'Output', 'adv.punc': 'Punctuation', 'adv.words': 'Word timestamps', 'adv.diarize': 'Speaker diarization',
@@ -266,6 +272,11 @@
       // 仅标注（不转写）：勾选后改调 /v2/audio/tag 同步返回事件/场景；tagScene 控制是否带场景时间线
       const tagOnly = ref(false);
       const tagScene = ref(true);
+      // 场景预设（下拉）：默认随服务端生效预设，按请求下发覆盖；空列表=服务端未暴露则隐藏
+      const scenePresets = ref([]);
+      const scenePreset = ref('');
+      const scenePresetOptions = computed(() =>
+        scenePresets.value.map(p => ({ value: p, label: t('preset.' + p) === 'preset.' + p ? p : t('preset.' + p) })));
       const adv = reactive({
         withPunc: true, withWords: true, diarize: true,   // 降级开关：默认开，关闭才下发 false
         maxSegment: null, idThreshold: null, idMargin: null,
@@ -285,6 +296,8 @@
             const c = await r.json();
             canIdentify.value = !!c.speaker_identification;
             srv.tagging = !!c.audio_tagging;
+            scenePresets.value = c.scene_presets || [];
+            scenePreset.value = c.scene_preset || (scenePresets.value[0] || '');
             srv.defaults = c.defaults || {};
           }
         } catch (e) { /* 探测失败按不可用处理，开关保持隐藏 */ }
@@ -318,6 +331,7 @@
           const tform = new FormData();
           tform.append('file', selectedFile.value);
           tform.append('with_scene', tagScene.value ? 'true' : 'false');
+          if (scenePreset.value) tform.append('scene_preset', scenePreset.value);
           try {
             const res = await fetch('/v2/audio/tag', { method: 'POST', body: tform, headers: authHeaders() });
             if (!res.ok) {
@@ -343,6 +357,7 @@
         if (adv.maxSegment != null) form.append('max_segment', String(adv.maxSegment));
         if (adv.idThreshold != null) form.append('speaker_id_threshold', String(adv.idThreshold));
         if (adv.idMargin != null) form.append('speaker_id_margin', String(adv.idMargin));
+        if (srv.tagging && scenePreset.value) form.append('scene_preset', scenePreset.value);
         try {
           const res = await fetch('/v2/asr', { method: 'POST', body: form, headers: authHeaders() });
           if (!res.ok) {
@@ -563,6 +578,7 @@
       return {
         uploadFileList, onUploadChange, fileSize, audioSrc, audioRef, selectedFile,
         canIdentify, identifySpeakers, srv, adv, ph, tagOnly, tagScene,
+        scenePreset, scenePresets, scenePresetOptions,
         current, progressPct, submit, cancelTask, seekAudio,
         taskList, toggleTaskList, manualRefresh, filterOptions, columns, rowProps,
         viewer, t,
@@ -597,6 +613,10 @@
                 <n-checkbox v-if="srv.tagging && tagOnly" v-model:checked="tagScene" size="small" style="margin-top:8px;margin-left:22px;">
                   {{ t('upload.tagScene') }}
                 </n-checkbox>
+                <div v-if="srv.tagging && scenePresetOptions.length" class="adv-field" style="margin-top:12px;">
+                  <span class="lbl">{{ t('scene.preset') }}</span>
+                  <n-select v-model:value="scenePreset" :options="scenePresetOptions" size="small" style="width:200px;"></n-select>
+                </div>
                 <n-checkbox v-if="canIdentify && !tagOnly" v-model:checked="identifySpeakers" size="small" :disabled="!adv.diarize" style="margin-top:12px;">
                   {{ t('upload.identify') }}
                 </n-checkbox>

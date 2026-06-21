@@ -108,6 +108,7 @@ async def submit_asr(
     max_segment: int | None = Form(None),
     speaker_id_threshold: float | None = Form(None),
     speaker_id_margin: float | None = Form(None),
+    scene_preset: str | None = Form(None),
 ) -> ASRResponse:
     """提交 ASR 任务。
 
@@ -136,6 +137,8 @@ async def submit_asr(
         if speaker_id_margin is not None:
             options["speaker_id_margin"] = coerce_num_in_range(
                 speaker_id_margin, SPK_ID_MARGIN_RANGE, "speaker_id_margin")
+        if scene_preset is not None:
+            options["scene_preset"] = scene_preset
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -161,10 +164,12 @@ async def submit_asr(
 async def tag_audio(
     file: UploadFile = File(...),
     with_scene: bool = Form(True),
+    scene_preset: str | None = Form(None),
 ) -> dict:
     """只打标不转写：解码音频 → 通用音频事件标注（audio_events 事件段）+ 可选 scene 时间线。
 
     同步返回（解码 + 推理在线程内执行，不阻塞事件循环）。未启用音频标注时 503。
+    scene_preset 可按请求覆盖场景判定预设（缺省=服务端生效权重）。
     """
     if _tagger is None:
         raise HTTPException(
@@ -175,7 +180,15 @@ async def tag_audio(
     def _work():
         import soundfile as sf
         from app.pipeline.audio_preprocessor import convert_to_wav
-        from app.runtime import audio_tagging
+        from app.runtime import audio_tagging, scene_mapper
+        if scene_preset:
+            _p = scene_mapper.resolve_preset(scene_preset)
+            vocal_priority, singing_min, singing_bias = (
+                _p["vocal_priority"], _p["singing_min"], _p["singing_bias"])
+        else:
+            vocal_priority = cfg.SCENE_VOCAL_PRIORITY
+            singing_min = cfg.SCENE_SINGING_MIN
+            singing_bias = cfg.SCENE_SINGING_BIAS
         wav_path = save_path + ".16k.wav"
         try:
             convert_to_wav(save_path, wav_path)
@@ -184,7 +197,8 @@ async def tag_audio(
                 _tagger, wav, sr,
                 interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS, topk=cfg.AUDIO_TAGGING_TOPK,
                 scene_enable=with_scene, scene_map=_scene_map,
-                silence_dbfs=cfg.SCENE_SILENCE_DBFS)
+                silence_dbfs=cfg.SCENE_SILENCE_DBFS, vocal_priority=vocal_priority,
+                singing_min=singing_min, singing_bias=singing_bias)
         finally:
             for p in (save_path, wav_path):
                 if os.path.exists(p):

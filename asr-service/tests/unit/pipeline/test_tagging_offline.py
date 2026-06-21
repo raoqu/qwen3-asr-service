@@ -25,6 +25,13 @@ class FakeTagger:
         return TagResult(top=top, scores=scores)
 
 
+class SilentTagger:
+    """恒返回非内容标签（模拟真实模型对静音的输出）：配合低能量 → scene→silence。"""
+
+    def predict_window(self, wav, sr, topk=5):
+        return TagResult(top=[("Dog", 0.3)], scores={"Dog": 0.3})
+
+
 class BoomTagger:
     def predict_window(self, wav, sr, topk=5):
         raise RuntimeError("boom")
@@ -87,9 +94,9 @@ def test_run_tagging_disabled_no_fields(noise_env, tmp_path):
 
 
 def test_run_tagging_silence_scene(monkeypatch, tmp_path):
-    # 全零音频 → 每窗 dBFS < silence_dbfs → scene=silence（即便模型给高 Singing）
+    # 全零音频 + 无内容信号 → 每窗 dBFS < silence_dbfs → scene=silence
     _patch_io(monkeypatch, tmp_path, np.zeros(16000 * 12, dtype=np.float32))
     monkeypatch.setattr("app.config.SCENE_ENABLE", True)
-    pipe = _make_pipe(FakeTagger(), [(0, 3000), (8000, 11000)])
+    pipe = _make_pipe(SilentTagger(), [(0, 3000), (8000, 11000)])
     result = pipe.run(str(tmp_path / "a.mp3"), "t1")
     assert all(seg.get("scene") == "silence" for seg in result["segments"])

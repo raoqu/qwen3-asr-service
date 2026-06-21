@@ -191,6 +191,17 @@ def _apply_cli_config(args):
         cfg.SCENE_EXIT_SEC = args.scene_exit_sec
     if getattr(args, "scene_silence_dbfs", None) is not None:
         cfg.SCENE_SILENCE_DBFS = args.scene_silence_dbfs
+    # 场景预设：解析为生效权重，再叠加显式单项覆盖（None=随预设）
+    from app.runtime import scene_mapper
+    cfg.SCENE_PRESET = getattr(args, "scene_preset", None) or cfg.SCENE_PRESET
+    _preset = scene_mapper.resolve_preset(cfg.SCENE_PRESET)
+    cfg.SCENE_VOCAL_PRIORITY = _preset["vocal_priority"]
+    cfg.SCENE_SINGING_MIN = _preset["singing_min"]
+    cfg.SCENE_SINGING_BIAS = _preset["singing_bias"]
+    if getattr(args, "scene_singing_min", None) is not None:
+        cfg.SCENE_SINGING_MIN = args.scene_singing_min
+    if getattr(args, "scene_singing_bias", None) is not None:
+        cfg.SCENE_SINGING_BIAS = args.scene_singing_bias
     cfg.ENABLE_OPENAI_API = getattr(args, "enable_openai_api", False)
     if getattr(args, "openai_sync_timeout", None) is not None:
         cfg.OPENAI_SYNC_TIMEOUT = args.openai_sync_timeout
@@ -461,6 +472,7 @@ def _assemble_standard(app: FastAPI, args) -> None:
     task_manager.start()
 
     # 构建服务信息（mode-aware，供 /health、/capabilities 使用）
+    from app.runtime import scene_mapper
     stream_enabled = getattr(args, "enable_stream", False)
     capabilities = {
         "mode": "standard",
@@ -469,6 +481,8 @@ def _assemble_standard(app: FastAPI, args) -> None:
         "speaker_identification": speaker_db_enabled,
         "audio_tagging": tagging_enabled,
         "scene": tagging_enabled and cfg.SCENE_ENABLE,
+        "scene_preset": cfg.SCENE_PRESET,
+        "scene_presets": list(scene_mapper.SCENE_PRESETS.keys()),
         "stream": {
             "enabled": stream_enabled,
             "backend": "vad-offline" if stream_enabled else None,
@@ -550,6 +564,9 @@ def _assemble_standard(app: FastAPI, args) -> None:
             scene_enter_sec=cfg.SCENE_ENTER_SEC,
             scene_exit_sec=cfg.SCENE_EXIT_SEC,
             scene_silence_dbfs=cfg.SCENE_SILENCE_DBFS,
+            scene_vocal_priority=cfg.SCENE_VOCAL_PRIORITY,
+            scene_singing_min=cfg.SCENE_SINGING_MIN,
+            scene_singing_bias=cfg.SCENE_SINGING_BIAS,
             tag_interval_ms=cfg.AUDIO_TAGGING_INTERVAL_MS,
             tag_topk=cfg.AUDIO_TAGGING_TOPK,
             scene_map=scene_map,

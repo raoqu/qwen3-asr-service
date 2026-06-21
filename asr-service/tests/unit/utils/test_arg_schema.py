@@ -60,6 +60,9 @@ LEGACY_DEFAULTS = {
     "scene_enter_sec": 2.0,
     "scene_exit_sec": 2.0,
     "scene_silence_dbfs": -50.0,
+    "scene_preset": "balanced",
+    "scene_singing_min": None,
+    "scene_singing_bias": None,
     # ── 兼容接口（/compat/*）新增，非重构前遗留 ──
     "enable_openai_api": False,
     "openai_sync_timeout": 300,

@@ -7,7 +7,8 @@ from app.runtime import scene_mapper as sm
 # ─── classify_window ───
 
 def test_silence_by_energy_floor():
-    label, conf = sm.classify_window({"Singing": 0.99}, dbfs=-60.0, silence_dbfs=-50.0)
+    # 能量低 且 无内容信号 → silence
+    label, conf = sm.classify_window({"Dog": 0.3}, dbfs=-60.0, silence_dbfs=-50.0)
     assert label == "silence" and conf == 1.0
 
 
@@ -37,10 +38,76 @@ def test_other_when_nonbucket_class_dominant():
     assert label == "other"
 
 
-def test_silence_overrides_high_model_score():
-    # 能量门优先于模型分：极低能量即便模型给高 Singing 也判 silence
+def test_low_energy_with_content_not_silenced():
+    # 内容感知静音门：能量极低但有明确语音/演唱信号时不判 silence
+    #（修复短促/轻声台词被打标窗 RMS 稀释到底噪而误判静音）
     label, _ = sm.classify_window({"Singing": 0.95}, dbfs=-80.0, silence_dbfs=-50.0)
-    assert label == "silence"
+    assert label == "singing"
+    label, _ = sm.classify_window({"Speech": 0.7}, dbfs=-80.0, silence_dbfs=-50.0)
+    assert label == "speech"
+
+
+def test_singing_overrides_music():
+    # 演唱优先：music 占优但演唱桶得分达阈值 → 改判 singing
+    label, _ = sm.classify_window({"Music": 0.6, "Singing": 0.2}, dbfs=-20.0, singing_min=0.1)
+    assert label == "singing"
+
+
+def test_music_kept_when_singing_below_threshold():
+    # 纯器乐：演唱桶得分低于阈值 → 保持 music
+    label, _ = sm.classify_window({"Music": 0.6, "Singing": 0.05}, dbfs=-20.0, singing_min=0.1)
+    assert label == "music"
+
+
+def test_singing_override_disabled_by_high_threshold():
+    # singing_min 调高 → 更偏 music（可配置验证）
+    label, _ = sm.classify_window({"Music": 0.6, "Singing": 0.2}, dbfs=-20.0, singing_min=0.5)
+    assert label == "music"
+
+
+# ─── 人声优先（vocal_priority）───
+
+def test_vocal_priority_speech_over_loud_music():
+    # 主播开 BGM 说话：music 分更高，但人声优先 → speech（不再被背景音乐压成 music）
+    label, _ = sm.classify_window({"Speech": 0.5, "Music": 0.8}, dbfs=-20.0, vocal_priority=True)
+    assert label == "speech"
+
+
+def test_vocal_priority_singing_over_loud_music():
+    # 主播演唱 + BGM：music 分更高，人声优先 + 命中演唱 → singing
+    label, _ = sm.classify_window(
+        {"Singing": 0.3, "Music": 0.8, "Speech": 0.2}, dbfs=-20.0, vocal_priority=True, singing_min=0.1)
+    assert label == "singing"
+
+
+def test_vocal_priority_off_falls_back_to_music():
+    # 关闭人声优先（music 预设）：纯 argmax → 响度更高的 music 占主导
+    label, _ = sm.classify_window({"Speech": 0.5, "Music": 0.8}, dbfs=-20.0, vocal_priority=False)
+    assert label == "music"
+
+
+def test_singing_bias_helps_acappella():
+    # 清唱：speech 略高于 singing；singing_bias 抬高演唱使其胜出
+    base = {"Speech": 0.4, "Singing": 0.35}
+    assert sm.classify_window(base, dbfs=-20.0, vocal_priority=True, singing_bias=0.0)[0] == "speech"
+    assert sm.classify_window(base, dbfs=-20.0, vocal_priority=True, singing_bias=0.1)[0] == "singing"
+
+
+def test_pure_instrumental_stays_music_under_vocal_priority():
+    # 纯器乐（无人声）：人声优先下仍落 music
+    label, _ = sm.classify_window({"Music": 0.7, "Musical instrument": 0.5}, dbfs=-20.0, vocal_priority=True)
+    assert label == "music"
+
+
+# ─── 预设 ───
+
+def test_presets_have_expected_shape():
+    for name in ("balanced", "live", "music"):
+        p = sm.resolve_preset(name)
+        assert set(p) == {"vocal_priority", "singing_min", "singing_bias"}
+    assert sm.resolve_preset("live")["singing_bias"] > 0          # 直播带清唱偏置
+    assert sm.resolve_preset("music")["vocal_priority"] is False  # 音乐优先关人声优先
+    assert sm.resolve_preset("nonexistent") == sm.resolve_preset("balanced")  # 未知名回退默认
 
 
 # ─── vote_scene ───

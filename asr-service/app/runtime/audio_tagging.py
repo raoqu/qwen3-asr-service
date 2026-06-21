@@ -35,12 +35,16 @@ def events_from_windows(windows: list[tuple]) -> list[dict]:
     return scene_mapper.aggregate_events([(s, e, top) for (s, e, top, _, _) in windows])
 
 
-def scene_timeline(windows: list[tuple], scene_map=None, silence_dbfs: float = -50.0) -> list[dict]:
+def scene_timeline(windows: list[tuple], scene_map=None, silence_dbfs: float = -50.0,
+                   vocal_priority: bool = True,
+                   singing_min: float = scene_mapper.SCENE_SINGING_MIN,
+                   singing_bias: float = 0.0) -> list[dict]:
     """逐窗 → 每窗 scene → run-length 合并成连续场景时间段 [{label, start_ms, end_ms}]。"""
     segs: list[dict] = []
     for (s, e, _top, scores, dbfs) in windows:
         label, _ = scene_mapper.classify_window(
-            scores, dbfs, scene_map=scene_map, silence_dbfs=silence_dbfs)
+            scores, dbfs, scene_map=scene_map, silence_dbfs=silence_dbfs,
+            vocal_priority=vocal_priority, singing_min=singing_min, singing_bias=singing_bias)
         if segs and segs[-1]["label"] == label:
             segs[-1]["end_ms"] = e
         else:
@@ -49,7 +53,10 @@ def scene_timeline(windows: list[tuple], scene_map=None, silence_dbfs: float = -
 
 
 def tag_wav(tagger, wav: np.ndarray, sr: int, *, interval_ms: int, topk: int,
-            scene_enable: bool, scene_map=None, silence_dbfs: float = -50.0) -> dict:
+            scene_enable: bool, scene_map=None, silence_dbfs: float = -50.0,
+            vocal_priority: bool = True,
+            singing_min: float = scene_mapper.SCENE_SINGING_MIN,
+            singing_bias: float = 0.0) -> dict:
     """整段打标（/v2/audio/tag 端点用）：audio_events 事件段 + 可选 scene_timeline。"""
     if wav.ndim > 1:
         wav = wav.mean(axis=1)
@@ -58,5 +65,6 @@ def tag_wav(tagger, wav: np.ndarray, sr: int, *, interval_ms: int, topk: int,
     windows = tag_windows(tagger, wav, sr, interval_ms, topk)
     result: dict = {"audio_events": events_from_windows(windows)}
     if scene_enable:
-        result["scene_timeline"] = scene_timeline(windows, scene_map, silence_dbfs)
+        result["scene_timeline"] = scene_timeline(
+            windows, scene_map, silence_dbfs, vocal_priority, singing_min, singing_bias)
     return result

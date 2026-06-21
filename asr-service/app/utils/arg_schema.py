@@ -426,6 +426,24 @@ ARG_SPECS = (
         help_en="Silence energy floor (dBFS); below this is judged silence (default: -50.0)",
     ),
     ArgSpec(
+        key="scene_preset", flags=("--scene-preset",), default="balanced",
+        choices=("balanced", "live", "music"), group="音频标注",
+        help="场景判定预设：balanced(均衡,人声优先) | live(直播,人声优先+清唱偏置) | music(音乐优先) (default: balanced)",
+        help_en="Scene preset: balanced (vocal-priority) | live (vocal-priority + a-cappella bias) | music (music-first) (default: balanced)",
+    ),
+    ArgSpec(
+        key="scene_singing_min", flags=("--scene-singing-min",), default=None, type=float,
+        group="音频标注",
+        help="演唱判定阈值（覆盖预设；留空=随预设）：演唱桶得分≥此值即可判 singing",
+        help_en="Singing threshold (overrides preset; empty = follow preset): classify as singing when the singing bucket scores ≥ this",
+    ),
+    ArgSpec(
+        key="scene_singing_bias", flags=("--scene-singing-bias",), default=None, type=float,
+        group="音频标注",
+        help="清唱偏置（覆盖预设；留空=随预设）：演唱与说话竞争时给演唱加的分，利于无伴奏清唱",
+        help_en="A-cappella bias (overrides preset; empty = follow preset): score added to singing when it competes with speech, helps unaccompanied singing",
+    ),
+    ArgSpec(
         key="enable_openai_api", flags=("--enable-openai-api",), default=False, type=bool,
         group="兼容接口",
         help="启用 OpenAI 兼容接口 /compat/openai/v1/*（drop-in 对接 OpenAI SDK）",

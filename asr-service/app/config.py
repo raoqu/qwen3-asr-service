@@ -203,6 +203,12 @@ SCENE_MAP_FILE = None               # 自定义场景映射 yaml/json 路径（N
 SCENE_ENTER_SEC = 2.0              # 迟滞（流式 Phase B）：连续判定 N 秒才进入某场景
 SCENE_EXIT_SEC = 2.0              # 迟滞（流式 Phase B）：连续判定 M 秒才退出
 SCENE_SILENCE_DBFS = -50.0         # 静音判定能量底（复用 noise_gate.rms_dbfs）
+SCENE_PRESET = "balanced"          # 场景判定预设：balanced(均衡,人声优先) | live(直播,人声优先+清唱偏置)
+                                   # | music(音乐优先)。打包好权重，部署默认 + 可按请求/WebUI 下拉选择
+# 以下三项为 SCENE_PRESET 解析后的生效权重（启动时由 main 写入）；显式配置/CLI 可单项覆盖：
+SCENE_VOCAL_PRIORITY = True        # 人声优先：说话/演唱达阈值即压过背景音乐（关=桶间 argmax+演唱特例）
+SCENE_SINGING_MIN = 0.10           # 演唱判定阈值（命中演唱桶达此值即可判演唱）
+SCENE_SINGING_BIAS = 0.0           # 清唱偏置：演唱与说话竞争时给演唱加的分（利于无伴奏清唱）
 
 # ─── vLLM（路线 A：原生流式）───
 

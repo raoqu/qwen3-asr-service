@@ -110,6 +110,8 @@ class CapabilitiesResponse(BaseModel):
     speaker_identification: bool = False   # 声纹库真名识别（enroll/identify 可用）
     audio_tagging: bool = False        # 通用音频事件标注（离线 audio_events）
     scene: bool = False                # 派生场景视图（segment.scene），需 audio_tagging
+    scene_preset: str | None = None    # 当前生效的场景判定预设
+    scene_presets: list[str] = []      # 可选预设列表（WebUI 下拉 / 按请求 scene_preset 覆盖）
     stream: StreamCapabilities
     defaults: dict = {}                # 可覆盖参数的当前生效默认值（Web UI 占位提示，反映实际配置）
     compat: dict = {}                  # 兼容接口已挂端点（vLLM Phase 3：openai/dashscope/realtime/realtime_partial）

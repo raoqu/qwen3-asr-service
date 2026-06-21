@@ -75,9 +75,9 @@ async def test_stream_hysteresis_holds_before_dwell():
 
 
 async def test_stream_silence_scene_on_quiet_audio():
-    s, ex = _session(SceneTagger("Singing"), enter=0.0)
+    s, ex = _session(SceneTagger("Dog"), enter=0.0)
     try:
-        # 全零（静音）→ 即便模型给 Singing，能量门判 silence
+        # 全零（静音）+ 无内容信号（Dog 非内容桶）→ 能量门判 silence
         msgs = await _collect(s.feed_audio((np.zeros(16000, dtype="<i2")).tobytes()))
         scenes = [m for m in msgs if m["type"] == "scene"]
         assert scenes and scenes[0]["label"] == "silence"
