@@ -36,7 +36,7 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
     opts = task.get("options") or {}
     identify_speakers = task.get("identify_speakers", False)
 
-    with_words = opts.get("with_words", True)
+    with_words = opts.get("with_words", False)   # 按需开关：默认关，显式 true 才返回词级时间戳
     max_segment = opts.get("max_segment")        # 秒；None → cfg.MAX_SEGMENT_DURATION
     diarize = opts.get("diarize", True)
     id_threshold = opts.get("speaker_id_threshold")
@@ -68,7 +68,8 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
 
         if progress_callback:
             progress_callback(0.1)
-        want_words = with_words and engine.align_enabled
+        # 对齐器已加载即产出词时间戳——分句（句界/句级 start-end）依赖它，与是否回传无关
+        want_words = engine.align_enabled
         # 长音频按静音切块逐块转写：转写阶段 0.1→0.85 逐块报进度 + 块间查取消 + 压峰值显存
         transcribed = _transcribe_progressive(
             engine, wav_path, duration, language, want_words, progress_callback, cancelled)
@@ -76,6 +77,10 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
             return _result([], "", language, engine, warnings)
         full_text, words = transcribed
         segments = _segment(full_text, words, duration, max_segment)
+        # 词级时间戳按需返回：默认关，仅 with_words=true 才在输出保留 words
+        if not with_words:
+            for seg in segments:
+                seg.pop("words", None)
 
         # 说话人分离/识别（可选；容错——失败只丢标签，不破坏转写）
         speakers = None

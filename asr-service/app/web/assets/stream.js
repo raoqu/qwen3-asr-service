@@ -184,7 +184,8 @@
         noiseFilter: false, energyFloor: null, snrMin: null,
         spkThreshold: null, spkMinSeg: null, spkMax: null, idThreshold: null, idMargin: null,
         maxEndSilence: null, maxSegmentSec: null,
-        withPunc: true, withWords: true, diarize: true,   // 降级开关：默认开，关闭才下发 false
+        withPunc: true, diarize: true,                     // 降级开关：默认开，关闭才下发 false
+        withWords: false,                                  // 按需开关：默认关，开启才下发 true
       });
       // 关闭说话人分离时联动复位声纹识别——identify 依赖 diarize，否则会把 identify_speakers=true
       // 与 diarize=false 一并下发，服务端静默丢弃，UI 却仍显示识别开启
@@ -334,10 +335,11 @@
         // 断句 / 分段
         if (adv.maxEndSilence != null) m.max_end_silence_ms = adv.maxEndSilence;
         if (adv.maxSegmentSec != null) m.max_segment_sec = adv.maxSegmentSec;
-        // 输出降级：仅功能已加载且用户关闭时下发 false（不下发＝沿用服务端默认）
+        // 输出降级：仅功能已加载且用户关闭时下发 false（不下发＝沿用服务端默认开）
         if (srv.punc && adv.withPunc === false) m.with_punc = false;
-        if (srv.words && adv.withWords === false) m.with_words = false;
         if (srv.speaker && adv.diarize === false) m.diarize = false;
+        // 词级时间戳为按需开关：默认关，仅用户开启时下发 true（服务端默认即关）
+        if (srv.words && adv.withWords === true) m.with_words = true;
         return m;
       }
       function waitDrain() {

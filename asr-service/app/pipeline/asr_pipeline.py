@@ -63,10 +63,12 @@ class ASRPipeline:
         wav_path = None
         chunk_dir = os.path.join(AUDIO_CHUNKS_DIR, task_id)
 
-        # 按请求覆盖（缺省=服务端默认）；降级开关只能关、不能开启未加载模型
+        # 按请求覆盖（缺省=服务端默认）；with_punc/diarize 为降级开关（默认开，只能关）。
+        # with_words 为按需开关：默认关闭，仅当请求显式置 true 才返回词级时间戳——
+        # 对齐器仍照常运行（供精准分句），关闭时只是从输出剥离 words（见下方剥离逻辑）。
         opts = options or {}
         with_punc = opts.get("with_punc", True)
-        with_words = opts.get("with_words", True)
+        with_words = opts.get("with_words", False)
         diarize = opts.get("diarize", True)
         max_segment = opts.get("max_segment")            # None → cfg
         id_threshold = opts.get("speaker_id_threshold")
@@ -148,11 +150,6 @@ class ASRPipeline:
                     chunks, total_chunks, language, cancelled, progress_callback,
                 )
 
-            # 词级时间戳降级：请求 with_words=false 时剥离 ASR 已产出的 words
-            if not with_words:
-                for seg in segments:
-                    seg.pop("words", None)
-
             # 4. 标点恢复（可选）
             if self.punc and with_punc:
                 punc_count = 0
@@ -190,6 +187,12 @@ class ASRPipeline:
             # 4.6 分句：把 ASR 处理块重组为句子（标点/停顿/说话人切换）。
             #     max_segment 仅在调用方显式给定时作为输出句长上限，缺省不按时长切。
             segments = segment_sentences(segments, max_segment=max_segment)
+
+            # 词级时间戳按需返回：对齐器始终参与分句（保证准确句界），分句完成后——
+            # 默认关闭、仅 with_words=true 才在输出保留 words；句子级 start/end 不受影响。
+            if not with_words:
+                for seg in segments:
+                    seg.pop("words", None)
 
             # 4.7 句子级说话人标签精修 + 声纹识别/自动登记（可选）
             if diar is not None:

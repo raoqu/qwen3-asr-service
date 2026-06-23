@@ -39,7 +39,8 @@ def test_defaults_when_absent():
     import app.config as cfg
     assert sess._spk_threshold == cfg.SPEAKER_THRESHOLD
     assert sess._max_end_silence_ms == cfg.VAD_MAX_SILENCE
-    assert sess._with_punc and sess._with_words and sess._with_diarize
+    assert sess._with_punc and sess._with_diarize        # 降级开关默认开
+    assert sess._with_words is False                      # 词级时间戳按需开关默认关
 
 
 def test_diarize_off_skips_cluster():

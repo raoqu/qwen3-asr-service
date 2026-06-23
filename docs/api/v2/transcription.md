@@ -36,7 +36,7 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | language | string | null | 语言代码，null 为自动检测 |
 | identify_speakers | bool | false | 对分离出的说话人做声纹识别（需说话人分离与[声纹库](speakers.md#说话人分离与声纹识别)均已启用） |
 | with_punc | bool | 服务端默认 | 是否做标点恢复（降级开关，只能关；服务端未加载标点模型则本就无标点） |
-| with_words | bool | 服务端默认 | 是否输出词级时间戳（需对齐模型已加载） |
+| with_words | bool | false（默认关） | 是否输出词级时间戳（按需开关，默认关闭；置 `true` 时返回 `segments[].words`，需对齐模型已加载）。句子级时间戳 `segments[].start/end` 始终返回，不受此参数影响 |
 | diarize | bool | 服务端默认 | 是否做说话人分离（关闭可省算力；需说话人引擎已加载） |
 | max_segment | int | 服务端默认 | VAD 切片合并最大时长（秒），范围 `[1, 30]` |
 | speaker_id_threshold | float | 服务端默认 | 声纹 1:N 识别阈，范围 `[0, 1]`（需声纹库已启用） |
@@ -118,7 +118,8 @@ WS /v2/asr/stream
 | speaker_id_margin | 服务端默认 | 声纹 top1-top2 margin，范围 `[0, 1]` |
 | max_end_silence_ms | 服务端默认 | 断句尾静音（毫秒），范围 `[200, 2000]`：调小出字更快、易切碎；调大不打断、出字慢 |
 | max_segment_sec | 服务端默认 | 长句兜底切分（秒），范围 `[1, 60]` |
-| with_punc / with_words / diarize | 服务端默认 | 降级开关：可关闭标点 / 词级时间戳 / 说话人分离（只能关，不能开启未加载的模型） |
+| with_punc / diarize | 服务端默认 | 降级开关：可关闭标点 / 说话人分离（只能关，不能开启未加载的模型） |
+| with_words | false（默认关） | 词级时间戳按需开关：默认关闭，置 `true` 才下发（需对齐模型已加载）；句子级时间戳始终返回 |
 
 > **范围钳制与软提示**：以上覆盖仅影响本会话；数值越界 / 类型错误 → `invalid_config`（致命）。
 > 参数合法但对应功能未启用（如 `diarize:true` 但服务端未加载说话人引擎）→ 不报错，

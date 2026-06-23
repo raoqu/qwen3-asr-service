@@ -36,7 +36,7 @@ curl -X POST http://127.0.0.1:8765/v2/asr \
 | language | string | null | Language code, null for auto-detection |
 | identify_speakers | bool | false | Run voiceprint identification on the diarized speakers (requires both speaker diarization and the [voiceprint database](speakers_EN.md#speaker-diarization--voiceprint-identification) to be enabled) |
 | with_punc | bool | server default | Whether to restore punctuation (downgrade-only toggle; no punctuation if the model isn't loaded server-side) |
-| with_words | bool | server default | Whether to emit word-level timestamps (requires the alignment model loaded) |
+| with_words | bool | false (off) | Whether to emit word-level timestamps (opt-in, off by default; set `true` to return `segments[].words`, requires the alignment model loaded). Sentence-level timestamps `segments[].start/end` are always returned regardless of this flag |
 | diarize | bool | server default | Whether to run speaker diarization (turn off to save compute; requires the speaker engine loaded) |
 | max_segment | int | server default | Max VAD-merge segment length (seconds), range `[1, 30]` |
 | speaker_id_threshold | float | server default | Voiceprint 1:N identification threshold, range `[0, 1]` (requires the voiceprint DB enabled) |
@@ -118,7 +118,8 @@ Client                                  Server
 | speaker_id_margin | server default | Voiceprint top1-top2 margin, range `[0, 1]` |
 | max_end_silence_ms | server default | Endpoint trailing silence (ms), range `[200, 2000]`: smaller = faster output but choppier; larger = won't interrupt but slower |
 | max_segment_sec | server default | Long-sentence fallback split (seconds), range `[1, 60]` |
-| with_punc / with_words / diarize | server default | Downgrade toggles: disable punctuation / word timestamps / diarization (off only; can't enable a model that isn't loaded) |
+| with_punc / diarize | server default | Downgrade toggles: disable punctuation / diarization (off only; can't enable a model that isn't loaded) |
+| with_words | false (off) | Word-level timestamps opt-in toggle: off by default, set `true` to emit (requires the alignment model loaded); sentence-level timestamps are always returned |
 
 > **Clamping & soft notices**: these overrides affect only the current session; out-of-range / wrong-type → `invalid_config` (fatal).
 > A well-formed param whose feature isn't enabled (e.g. `diarize:true` with no speaker engine loaded) does NOT error —

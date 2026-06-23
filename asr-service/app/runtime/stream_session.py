@@ -124,7 +124,7 @@ class StreamSession:
         self._spk_id_margin = cfg.SPEAKER_ID_MARGIN
         self._max_end_silence_ms = cfg.VAD_MAX_SILENCE   # 始终显式传 VAD，避免跨会话继承
         self._with_punc = True                   # 降级开关：仅能关（不能开启未加载模型）
-        self._with_words = True
+        self._with_words = False                  # 按需开关：默认关，cfg with_words=true 才发词级时间戳
         self._with_diarize = True
         self._warnings = []                      # 因功能未启用被忽略的参数（软提示）
 

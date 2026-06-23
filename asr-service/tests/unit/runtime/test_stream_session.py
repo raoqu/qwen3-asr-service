@@ -124,6 +124,7 @@ async def test_words_attached_when_enabled():
     item = types.SimpleNamespace(text="a", time_stamps=types.SimpleNamespace(items=[word]))
     svad = FakeSVAD(events_by_call={0: [{"type": "complete", "start": 1000, "end": 2000}]})
     s, asr, ex = _make_session(svad, enable_words=True, asr_result=[item])
+    s.configure({"with_words": True})        # 词级时间戳默认关，需会话显式开启
     try:
         msgs = await _collect(s.feed_audio(_pcm_ms(2000)))
         assert "words" in msgs[0]

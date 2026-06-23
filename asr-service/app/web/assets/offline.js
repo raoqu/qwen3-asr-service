@@ -227,6 +227,7 @@
       const uploadFileList = ref([]);
       const audioSrc = ref('');
       let audioObjectURL = null;
+      let segStopHandler = null;        // 句段试听的「到句末暂停」监听，切段/重播时先清除
       function onUploadChange(payload) {
         const list = payload.fileList;
         const item = list.length ? list[list.length - 1] : null;
@@ -250,7 +251,8 @@
       // —— 高级设置门控标志（/v2/health）+ 按请求覆盖值（null=不下发，用服务端默认）——
       const srv = reactive({ punc: false, align: false, speaker: false, speakerDb: false, defaults: {} });
       const adv = reactive({
-        withPunc: true, withWords: true, diarize: true,   // 降级开关：默认开，关闭才下发 false
+        withPunc: true, diarize: true,                     // 降级开关：默认开，关闭才下发 false
+        withWords: false,                                  // 按需开关：默认关，开启才下发 true
         maxSegment: null, idThreshold: null, idMargin: null,
       });
       // 关闭说话人分离时联动复位声纹识别——identify 依赖 diarize，否则会把 identify_speakers=true
@@ -297,10 +299,11 @@
         const form = new FormData();
         form.append('file', selectedFile.value);
         if (identifySpeakers.value) form.append('identify_speakers', 'true');
-        // 降级开关：仅在功能已加载且用户关闭时下发 false（不下发＝沿用服务端默认）
+        // 降级开关：仅在功能已加载且用户关闭时下发 false（不下发＝沿用服务端默认开）
         if (srv.punc && adv.withPunc === false) form.append('with_punc', 'false');
-        if (srv.align && adv.withWords === false) form.append('with_words', 'false');
         if (srv.speaker && adv.diarize === false) form.append('diarize', 'false');
+        // 词级时间戳为按需开关：默认关，仅用户开启时下发 true（服务端默认即关）
+        if (srv.align && adv.withWords === true) form.append('with_words', 'true');
         if (adv.maxSegment != null) form.append('max_segment', String(adv.maxSegment));
         if (adv.idThreshold != null) form.append('speaker_id_threshold', String(adv.idThreshold));
         if (adv.idMargin != null) form.append('speaker_id_margin', String(adv.idMargin));
@@ -380,7 +383,22 @@
       }
       function seekAudio(seg) {
         const el = audioRef.value;
-        if (el) { el.currentTime = seg.start; el.play(); }
+        if (!el) return;
+        // 清除上一段遗留的句末停止监听，避免多段叠加导致提前/错位暂停
+        if (segStopHandler) { el.removeEventListener('timeupdate', segStopHandler); segStopHandler = null; }
+        el.currentTime = seg.start;
+        el.play();
+        // 仅播放句子 [start, end] 区间：到句末自动暂停（end 缺省则不限制，播到结尾）
+        if (seg.end != null) {
+          segStopHandler = () => {
+            if (el.currentTime >= seg.end) {
+              el.pause();
+              el.removeEventListener('timeupdate', segStopHandler);
+              segStopHandler = null;
+            }
+          };
+          el.addEventListener('timeupdate', segStopHandler);
+        }
       }
 
       // —— 任务列表（历史 + 自适应自动刷新）——
