@@ -108,6 +108,15 @@ def _apply_cli_config(args):
     """将命令行参数写入全局配置（模式无关部分）"""
     cfg.MODEL_SOURCE = args.model_source
     cfg.MAX_SEGMENT_DURATION = args.max_segment
+    cfg.REGEX_SEGMENT = getattr(args, "regex_segment", False)
+    if getattr(args, "regex_long_sec", None) is not None:
+        cfg.REGEX_LONG_SEC = args.regex_long_sec
+    if getattr(args, "regex_short_sec", None) is not None:
+        cfg.REGEX_SHORT_SEC = args.regex_short_sec
+    if getattr(args, "regex_vad_max_sec", None) is not None:
+        cfg.REGEX_VAD_MAX_SEC = args.regex_vad_max_sec
+    if getattr(args, "regex_vad_min_sec", None) is not None:
+        cfg.REGEX_VAD_MIN_SEC = args.regex_vad_min_sec
     if args.host is not None:
         cfg.HOST = args.host
     if args.port is not None:

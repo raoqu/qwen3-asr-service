@@ -117,6 +117,43 @@ ARG_SPECS = (
         help_en="Max merged VAD segment length in seconds (default: 5)",
     ),
     ArgSpec(
+        key="regex", flags=("--regex",), default=False, type=bool,
+        dest="regex_segment", group="正则分句",
+        help="正则后处理分句（需词级时间戳）：以标点正则 + 长短句/VAD 时长约束重切句子",
+        help_en="Regex sentence post-processing (needs word timestamps): re-split sentences "
+                "by punctuation regex plus long/short and VAD duration constraints",
+        negative_flags=("--no-regex",), negative_help="关闭正则后处理分句（覆盖配置文件）",
+        negative_help_en="Disable regex sentence post-processing (overrides config file)",
+    ),
+    ArgSpec(
+        key="regex_long_sec", flags=("--regex-long-sec",), default=15.0, type=float,
+        group="正则分句",
+        help="长句上限秒：句长达此值强制切（标点优先，无则按停顿/时间）(default: 15.0)",
+        help_en="Long-sentence cap in seconds: force a cut when reached (punctuation first, "
+                "else by pause/time) (default: 15.0)",
+    ),
+    ArgSpec(
+        key="regex_short_sec", flags=("--regex-short-sec",), default=3.0, type=float,
+        group="正则分句",
+        help="短句下限秒：标点边界左侧累积句长不足此值不切，继续累积 (default: 3.0)",
+        help_en="Short-sentence floor in seconds: don't cut at a punctuation boundary while "
+                "the accumulated sentence is shorter than this (default: 3.0)",
+    ),
+    ArgSpec(
+        key="regex_vad_max_sec", flags=("--regex-vad-max-sec",), default=10.0, type=float,
+        group="正则分句",
+        help="VAD 上限秒：完整句超此值按内部最大停顿切开（哪怕未超 long）(default: 10.0)",
+        help_en="VAD upper bound in seconds: split a complete sentence longer than this at its "
+                "largest internal pause (even if under long) (default: 10.0)",
+    ),
+    ArgSpec(
+        key="regex_vad_min_sec", flags=("--regex-vad-min-sec",), default=2.0, type=float,
+        group="正则分句",
+        help="VAD 下限秒：短于此值的句子并入相邻句（合并后不超 long）(default: 2.0)",
+        help_en="VAD lower bound in seconds: merge a sentence shorter than this into a "
+                "neighbor (merged result stays within long) (default: 2.0)",
+    ),
+    ArgSpec(
         key="api_key", flags=("--api-key",), default=None, group="服务",
         help="API 密钥，设置后启用 Bearer token 认证（覆盖 ASR_API_KEY 环境变量）",
         help_en="API key; enables Bearer token auth when set "

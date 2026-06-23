@@ -21,6 +21,12 @@ LEGACY_DEFAULTS = {
     "port": None,
     "web": False,
     "max_segment": 5,
+    # ── 正则后处理分句新增，非重构前遗留 ──
+    "regex_segment": False,
+    "regex_long_sec": 15.0,
+    "regex_short_sec": 3.0,
+    "regex_vad_max_sec": 10.0,
+    "regex_vad_min_sec": 2.0,
     "api_key": None,
     "max_queue_size": None,
     "enable_stream": False,

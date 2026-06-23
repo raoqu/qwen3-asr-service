@@ -96,6 +96,14 @@ MIN_AUDIO_DURATION = 1.0        # 最短音频时长（秒）
 SENTENCE_LONG_PAUSE_MS = 800   # 强切停顿：词/块间静音 >= 此值视为句末（与 VAD_MAX_SILENCE 对齐）
 SENTENCE_SHORT_PAUSE_MS = 400  # 弱切停顿：块末标点是否为真句末的判据 / 超长句二次切的细切点
 
+# ─── 正则后处理分句（--regex，需词级时间戳）───
+# 开启后对默认分句结果再做「标点正则 + 时长约束」重切；关闭时管线行为不变。见 pipeline/regex_segmenter.py。
+REGEX_SEGMENT = False          # 总开关：开启正则后处理分句（仅在对齐器启用、segment 带 words 时生效）
+REGEX_LONG_SEC = 15.0          # 长句上限（秒）：句长达此值强制切（标点边界优先，无则按停顿/时间）
+REGEX_SHORT_SEC = 3.0          # 短句下限（秒）：标点边界左侧累积句长不足此值不切，继续累积
+REGEX_VAD_MAX_SEC = 10.0       # VAD 上限（秒）：完整句超此值按内部最大停顿切开（哪怕未超 long）
+REGEX_VAD_MIN_SEC = 2.0        # VAD 下限（秒）：短于此值的句子并入相邻句（合并后不超 long）
+
 # ─── 缓存路径 ───
 
 import tempfile

@@ -8,6 +8,7 @@ from app.engines.vad_engine import VADEngine
 from app.engines.punc_engine import PuncEngine
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
 from app.pipeline.sentence_segmenter import segment_sentences
+from app.pipeline.regex_segmenter import regex_segment
 from app.utils.result_parser import extract_text, extract_words
 from app.config import (
     UPLOADS_DIR,
@@ -187,6 +188,16 @@ class ASRPipeline:
             # 4.6 分句：把 ASR 处理块重组为句子（标点/停顿/说话人切换）。
             #     max_segment 仅在调用方显式给定时作为输出句长上限，缺省不按时长切。
             segments = segment_sentences(segments, max_segment=max_segment)
+
+            # 4.6+ 正则后处理分句（--regex，需词级时间戳）：以标点正则 + 长短句/VAD 时长
+            #      约束重切，替换默认分句结果。须在剥离 words 前执行（依赖词级时间戳），
+            #      说话人最终标签仍由下方 4.7 步按新句界重算。
+            if cfg.REGEX_SEGMENT and self.asr.align_enabled:
+                segments = regex_segment(
+                    segments,
+                    long_sec=cfg.REGEX_LONG_SEC, short_sec=cfg.REGEX_SHORT_SEC,
+                    vad_max_sec=cfg.REGEX_VAD_MAX_SEC, vad_min_sec=cfg.REGEX_VAD_MIN_SEC,
+                )
 
             # 词级时间戳按需返回：对齐器始终参与分句（保证准确句界），分句完成后——
             # 默认关闭、仅 with_words=true 才在输出保留 words；句子级 start/end 不受影响。
