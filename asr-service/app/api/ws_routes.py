@@ -13,7 +13,7 @@ from uuid import uuid4
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import app.config as cfg
-from app.api.ws_schemas import SessionCreated, SessionClosed, ErrorMsg
+from app.api.ws_schemas import SessionCreated, SessionClosed, ErrorMsg, EnrollMsg, EnrollAck
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,25 @@ async def stream(ws: WebSocket):
                         await ws.send_json(r)
                         sent_msgs += 1
                     return
+                if isinstance(item, tuple):
+                    # 控制消息走消费协程（与 final 同一发送方，避免并发写 WS）
+                    if item[0] == "enroll_error":      # 接收侧校验失败的回执（单发送方约束）
+                        await ws.send_json(ErrorMsg(
+                            code="enroll_failed", message=item[1]).model_dump())
+                        sent_msgs += 1
+                        continue
+                    try:
+                        ack = await session.handle_enroll(item[1])
+                        await ws.send_json(EnrollAck(**ack).model_dump())
+                    except ValueError as e:
+                        await ws.send_json(ErrorMsg(
+                            code="enroll_failed", message=str(e)).model_dump())
+                    except Exception as e:
+                        logger.warning(f"声纹登记失败: {e}", exc_info=True)
+                        await ws.send_json(ErrorMsg(
+                            code="enroll_failed", message="声纹登记失败").model_dump())
+                    sent_msgs += 1
+                    continue
                 try:
                     async for r in session.feed_audio(item):
                         await ws.send_json(r)
@@ -160,6 +179,10 @@ async def stream(ws: WebSocket):
                 backlog_bytes += len(m["bytes"])
                 frame_q.put_nowait(m["bytes"])
             elif m.get("text"):
+                if len(m["text"]) > cfg.STREAM_MAX_TEXT_BYTES:   # 控制帧应为小 JSON，超限丢弃防滥用
+                    logger.warning(f"[stream] 丢弃超限控制帧 sid={sid[:8]} "
+                                   f"{len(m['text'])}B > {cfg.STREAM_MAX_TEXT_BYTES}B")
+                    continue
                 try:
                     typ = json.loads(m["text"]).get("type")
                 except (ValueError, TypeError):
@@ -169,6 +192,14 @@ async def stream(ws: WebSocket):
                     frame_q.put_nowait(None)
                     await consume_task              # 消费完积压并冲刷末句
                     break
+                if typ == "enroll":
+                    # 接收侧按 schema 校验（类型/限长），失败入队回执；保持单一发送方
+                    try:
+                        payload = EnrollMsg(**json.loads(m["text"])).model_dump()
+                    except Exception:
+                        frame_q.put_nowait(("enroll_error", "enroll 消息格式不合法"))
+                    else:
+                        frame_q.put_nowait(("enroll", payload))
     except WebSocketDisconnect:
         pass
     except asyncio.TimeoutError:

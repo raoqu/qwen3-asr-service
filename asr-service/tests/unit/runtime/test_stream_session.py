@@ -439,19 +439,27 @@ def test_backend_speaker_capability_and_release():
 # ─── 声纹识别联动（fake SpeakerService）───
 
 class FakeSpeakerStore:
-    """仅提供缓存失效信号（真 store 的 cache_version 语义：写后自增）。"""
+    """仅提供缓存失效信号（真 store 的 cache_version 语义：写后自增）+ 占位名分配。"""
 
     def __init__(self):
         self.cache_version = 0
+        self._seq = 0
+
+    def alloc_auto_name(self):
+        self._seq += 1
+        return f"说话人_{self._seq:02d}"
 
 
 class FakeSpeakerService:
-    """按调用序号返回脚本化识别结果（None=unknown）。"""
+    """按调用序号返回脚本化识别结果（None=unknown）+ 记录登记调用。"""
 
-    def __init__(self, names=("张三",)):
+    def __init__(self, names=("张三",), merge_hit_name=None):
         self.names = list(names)
         self.calls = 0
         self.store = FakeSpeakerStore()
+        self.enrolled = []                  # [(name, dur, consent, source)]
+        self.merged = []                    # [(name, dur)]：enroll_or_merge 命中既有的合并记录
+        self._merge_hit_name = merge_hit_name   # 非 None → 显式登记走"命中既有"合并分支
 
     def map_clusters(self, clusters, *, id_threshold=None, id_margin=None):
         name = self.names[self.calls] if self.calls < len(self.names) else self.names[-1]
@@ -461,6 +469,20 @@ class FakeSpeakerService:
                      "name": None, "score": None}]
         return [{"label": clusters[0]["label"], "speaker_id": "x" * 32,
                  "name": name, "score": 0.6}]
+
+    def enroll_cluster(self, name, centroid, dur_sec, consent, source="manual"):
+        self.enrolled.append((name, dur_sec, consent, source))
+        self.store.cache_version += 1
+        return f"id-{len(self.enrolled):04d}"
+
+    def enroll_or_merge_cluster(self, name, centroid, dur_sec, *,
+                                id_threshold, id_margin, consent):
+        if self._merge_hit_name is not None:        # 命中既有：合并，不新建
+            self.merged.append((name, dur_sec))
+            return {"speaker_id": "x" * 32, "name": self._merge_hit_name,
+                    "matched_existing": True}
+        sid = self.enroll_cluster(name, centroid, dur_sec, consent=consent, source="manual")
+        return {"speaker_id": sid, "name": name, "matched_existing": False}
 
 
 def _three_finals_svad():
@@ -587,3 +609,187 @@ def test_backend_speaker_identification_capability():
     b3 = VadOfflineBackend(asr, vad, None, speaker_service=FakeSpeakerService())
     assert b3.capabilities["speaker_identification"] is False
     b3.shutdown()
+
+
+# ─── 声纹 UUID 回传 + 实时登记（本特性）───
+
+async def test_final_carries_speaker_id_when_requested():
+    service = FakeSpeakerService()
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    s.configure({"audio_fs": 16000, "identify_speakers": True, "return_speaker_id": True})
+    try:
+        msgs = await _collect(s.feed_audio(_pcm_ms(3000)))
+        assert msgs[0]["speaker_name"] == "张三"
+        assert msgs[0]["speaker_id"] == "x" * 32          # 命中即回传 uuid
+    finally:
+        ex.shutdown(wait=False)
+
+
+async def test_speaker_id_withheld_without_flag():
+    service = FakeSpeakerService()
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)   # return_speaker_id 默认关
+    try:
+        msgs = await _collect(s.feed_audio(_pcm_ms(3000)))
+        assert msgs[0]["speaker_name"] == "张三"          # 真名仍带
+        assert "speaker_id" not in msgs[0]                # uuid 未请求则不回传
+    finally:
+        ex.shutdown(wait=False)
+
+
+async def test_stream_auto_enroll_unmatched(monkeypatch):
+    import app.config as cfg
+    monkeypatch.setattr(cfg, "STREAM_SPEAKER_AUTO_ENROLL", True)
+    monkeypatch.setattr(cfg, "SPEAKER_AUTO_ENROLL_MIN_SEC", 2.0)
+    service = FakeSpeakerService(names=(None,))            # 永远 unknown
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    s.configure({"audio_fs": 16000, "identify_speakers": True, "return_speaker_id": True})
+    try:
+        msgs = await _collect(s.feed_audio(_pcm_ms(3000)))   # 3s ≥ 2s 门槛 → 自动登记
+        assert len(service.enrolled) == 1
+        assert service.enrolled[0][3] == "auto"              # source=auto
+        assert msgs[0]["speaker_id"].startswith("id-")
+        assert msgs[0]["speaker_name"].startswith("说话人_")
+    finally:
+        ex.shutdown(wait=False)
+
+
+async def test_stream_auto_enroll_skipped_below_threshold(monkeypatch):
+    import app.config as cfg
+    monkeypatch.setattr(cfg, "STREAM_SPEAKER_AUTO_ENROLL", True)
+    monkeypatch.setattr(cfg, "SPEAKER_AUTO_ENROLL_MIN_SEC", 10.0)
+    service = FakeSpeakerService(names=(None,))
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    try:
+        msgs = await _collect(s.feed_audio(_pcm_ms(3000)))   # 3s < 10s → 不登记
+        assert service.enrolled == []
+        assert "speaker_id" not in msgs[0]
+    finally:
+        ex.shutdown(wait=False)
+
+
+async def test_stream_auto_enroll_off_by_default(monkeypatch):
+    import app.config as cfg
+    monkeypatch.setattr(cfg, "STREAM_SPEAKER_AUTO_ENROLL", False)
+    monkeypatch.setattr(cfg, "SPEAKER_AUTO_ENROLL_MIN_SEC", 2.0)
+    service = FakeSpeakerService(names=(None,))
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    try:
+        await _collect(s.feed_audio(_pcm_ms(3000)))
+        assert service.enrolled == []                        # 开关关 → 不自动登记
+    finally:
+        ex.shutdown(wait=False)
+
+
+async def test_handle_enroll_explicit():
+    service = FakeSpeakerService(names=(None,))               # 未命中，靠显式登记
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    s.configure({"audio_fs": 16000, "identify_speakers": True, "return_speaker_id": True})
+    try:
+        await _collect(s.feed_audio(_pcm_ms(3000)))           # 建簇 A
+        ack = await s.handle_enroll({"label": "A", "name": "李四", "consent": True})
+        assert ack["label"] == "A" and ack["name"] == "李四"
+        assert ack["speaker_id"].startswith("id-")
+        assert service.enrolled[-1][0] == "李四"
+        assert service.enrolled[-1][3] == "manual"            # 显式登记=manual
+        # 会话缓存即时写入新身份（后续同簇 final 据此带名/id）
+        assert s._spk_name_cache["A"]["speaker_id"] == ack["speaker_id"]
+        assert s._spk_name_cache["A"]["name"] == "李四"
+    finally:
+        ex.shutdown(wait=False)
+
+
+async def test_handle_enroll_rejects_no_consent_and_unknown_label():
+    service = FakeSpeakerService()
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    try:
+        await _collect(s.feed_audio(_pcm_ms(3000)))           # 建簇 A
+        with pytest.raises(ValueError):
+            await s.handle_enroll({"label": "A", "name": "李四", "consent": False})
+        with pytest.raises(ValueError):
+            await s.handle_enroll({"label": "Z", "name": "王五", "consent": True})
+        with pytest.raises(ValueError):
+            await s.handle_enroll({"label": "A", "name": "  ", "consent": True})
+        assert service.enrolled == []                         # 校验失败一律不入库
+    finally:
+        ex.shutdown(wait=False)
+
+
+# ─── 评审修复：登记质量门槛 + 自动登记幂等 + 短段不计时长 ───
+
+async def test_handle_enroll_rejects_short_sample(monkeypatch):
+    import app.config as cfg
+    monkeypatch.setattr(cfg, "SPEAKER_ENROLL_MIN_SEC", 3.0)
+    svad = FakeSVAD(events_by_call={0: [{"type": "complete", "start": 0, "end": 2000}]})
+    service = FakeSpeakerService(names=(None,))
+    s, asr, ex = _make_session(svad, speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    try:
+        await _collect(s.feed_audio(_pcm_ms(2000)))           # 簇 A 仅 2.0s 有效语音
+        with pytest.raises(ValueError):
+            await s.handle_enroll({"label": "A", "name": "李四", "consent": True})
+        assert service.enrolled == []                         # 不足门槛 → 不入库
+    finally:
+        ex.shutdown(wait=False)
+
+
+async def test_auto_enroll_idempotent_per_session(monkeypatch):
+    """缓存失效重查后 identify 仍未命中，也不二次自动登记同一簇（幂等守卫）。"""
+    import app.config as cfg
+    monkeypatch.setattr(cfg, "STREAM_SPEAKER_AUTO_ENROLL", True)
+    monkeypatch.setattr(cfg, "SPEAKER_AUTO_ENROLL_MIN_SEC", 2.0)
+    service = FakeSpeakerService(names=(None, None, None))    # 永远 unknown，逼出重查
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    try:
+        for _ in range(3):                                    # 同一说话人多段，触发缓存失效重查
+            await _collect(s.feed_audio(_pcm_ms(3000)))
+        assert len(service.enrolled) == 1                     # 仅首次自动登记，重查不再重复
+    finally:
+        ex.shutdown(wait=False)
+
+
+async def test_short_segment_not_counted_in_dur(monkeypatch):
+    """短段（< min_seg）只挂靠不建簇，不应计入自动登记时长门槛。"""
+    import app.config as cfg
+    monkeypatch.setattr(cfg, "STREAM_SPEAKER_AUTO_ENROLL", True)
+    monkeypatch.setattr(cfg, "SPEAKER_AUTO_ENROLL_MIN_SEC", 2.0)
+    # 首段 3000ms 建簇 A 并自动登记（dur 已过门槛）——单独验证短段不灌水更直接：
+    svad = FakeSVAD(events_by_call={
+        0: [{"type": "complete", "start": 0, "end": 1800}],   # 建簇（≥1500）
+        1: [{"type": "complete", "start": 1800, "end": 2000}],  # 200ms 短段，仅挂靠
+    })
+    service = FakeSpeakerService(names=(None, None))
+    s, asr, ex = _make_session(svad, speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    try:
+        await _collect(s.feed_audio(_pcm_ms(1800)))
+        await _collect(s.feed_audio(_pcm_ms(200)))
+        # 仅 1800ms 计入（短段 200ms 不计）；门槛 2000ms 未达 → 不自动登记
+        assert s._spk_dur_ms.get("A", 0) == 1800
+        assert service.enrolled == []
+    finally:
+        ex.shutdown(wait=False)
+
+
+async def test_handle_enroll_merges_into_existing(monkeypatch):
+    """显式登记命中既有说话人 → 合并（追加模板）而非重复建档，返回既有名 + matched_existing。"""
+    import app.config as cfg
+    monkeypatch.setattr(cfg, "SPEAKER_ENROLL_MIN_SEC", 3.0)
+    service = FakeSpeakerService(names=(None,), merge_hit_name="张三")
+    s, asr, ex = _make_session(_three_finals_svad(), speaker=FakeSpeakerEngine(),
+                               speaker_service=service, identify=True)
+    try:
+        await _collect(s.feed_audio(_pcm_ms(3000)))           # dur 3.0 满足门槛
+        ack = await s.handle_enroll({"label": "A", "name": "李四", "consent": True})
+        assert ack["matched_existing"] is True
+        assert ack["name"] == "张三"                          # 命中既有，返回既有名
+        assert service.merged and not service.enrolled        # 走合并、未新建
+    finally:
+        ex.shutdown(wait=False)
