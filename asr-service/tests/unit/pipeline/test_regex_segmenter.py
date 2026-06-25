@@ -72,25 +72,60 @@ def test_short_units_accumulate_until_short():
     assert [s["text"] for s in out] == ["好。妙。"]
 
 
-# ─── 长句上限：强制切（停顿优先）──────────────────────────────────────
+# ─── 只在句末标点处切：无内部标点的长句保持完整 ───────────────────────
 
-def test_long_sentence_force_split_at_pause():
+def test_long_sentence_without_punct_stays_whole():
+    # 超长但句内无句末标点（且有大停顿）→ 绝不在停顿/非标点处切，保持完整
     seg = _seg("前半后半", 0.0, 5.0,
                [_w("前", 0, 1), _w("半", 1, 2), _w("后", 2.5, 3.5), _w("半", 3.5, 5)])
     out = regex_segment([seg], long_sec=3.0, short_sec=0.3,
-                        vad_max_sec=100.0, vad_min_sec=0.0)
-    assert [s["text"] for s in out] == ["前半", "后半"]
-    assert out[0]["end"] == 2.0 and out[1]["start"] == 2.5
-
-
-# ─── VAD 上限：完整句超上限按最大停顿切（哪怕未超 long）─────────────────
-
-def test_vad_max_splits_complete_sentence():
-    seg = _seg("你好世界。", 0.0, 4.0,
-               [_w("你", 0, 0.5), _w("好", 0.5, 1), _w("世", 2.5, 3), _w("界", 3, 4)])
-    out = regex_segment([seg], long_sec=100.0, short_sec=0.3,
                         vad_max_sec=2.0, vad_min_sec=0.0)
-    assert [s["text"] for s in out] == ["你好", "世界。"]
+    assert [s["text"] for s in out] == ["前半后半"]
+
+
+# ─── VAD 上限：仅在内部句末标点处再切（不在非标点处切）─────────────────
+
+def test_vad_max_resplits_at_internal_punct():
+    # 短句被并到一起形成 >vad_max 的合并句；vad_max 在内部句末标点处把它切回
+    seg = _seg("好。妙。极佳的世界。", 0.0, 6.0,
+               [_w("好", 0, 1), _w("妙", 1, 2),
+                _w("极", 2, 3), _w("佳", 3, 4), _w("的", 4, 5),
+                _w("世", 5, 5.5), _w("界", 5.5, 6)])
+    # short=4 → "好。"(1s)、"妙。"(累计2s) 持续并入，整体并成 "好。妙。极佳的世界。"(6s)
+    out = regex_segment([seg], long_sec=100.0, short_sec=4.0,
+                        vad_max_sec=3.0, vad_min_sec=0.0)
+    # vad_max=3：在内部句末标点处再切，每段 <=3s 且都断在 。 处
+    assert [s["text"] for s in out] == ["好。妙。", "极佳的世界。"]
+    assert all(s["text"].rstrip()[-1] in "。！？!?" for s in out)
+
+
+def test_vad_max_single_sentence_no_internal_punct_stays_whole():
+    # 单个完整长句（内部无句末标点）超过 vad_max → 无处可切，保持完整
+    seg = _seg("这是一句没有内部句末标点的很长的话。", 0.0, 8.0,
+               [_w(c, i * 0.4, i * 0.4 + 0.4) for i, c in
+                enumerate("这是一句没有内部句末标点的很长的话")])
+    out = regex_segment([seg], long_sec=100.0, short_sec=0.3,
+                        vad_max_sec=3.0, vad_min_sec=0.0)
+    assert len(out) == 1
+    assert out[0]["text"] == seg["text"]
+
+
+# ─── 成对收尾引号随句末归入前句（." / 。"）──────────────────────────────
+
+def test_closing_quote_kept_with_sentence():
+    seg = _seg("他说“你好。”然后呢？", 0.0, 5.0,
+               [_w("他", 0, 0.5), _w("说", 0.5, 1), _w("你", 1.5, 2), _w("好", 2, 2.5),
+                _w("然", 3, 3.5), _w("后", 3.5, 4), _w("呢", 4, 5)])
+    out = regex_segment([seg], **_LOOSE)
+    assert [s["text"] for s in out] == ["他说“你好。”", "然后呢？"]
+
+
+def test_english_period_before_closing_quote_splits():
+    seg = _seg('She said "ok." Then left.', 0.0, 4.0,
+               [_w("She", 0, 0.5), _w("said", 0.5, 1), _w("ok", 1.2, 1.6),
+                _w("Then", 2, 2.5), _w("left", 2.5, 4)])
+    out = regex_segment([seg], **_LOOSE)
+    assert out[0]["text"].rstrip() == 'She said "ok."'
 
 
 # ─── VAD 下限：过短句合并 ─────────────────────────────────────────────

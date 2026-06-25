@@ -4,32 +4,33 @@
 segment_sentences 的输出再做一遍「标点正则 + 时长约束」重切，替换其结果；未开启时
 管线行为与现状完全一致（本模块不被调用）。
 
-四参数两阶段（默认值见 config.py / 暴露见 arg_schema）：
+核心约束——**所有句子边界只落在完整的句末标点处**：
+切点只允许出现在句末标点 .。?？!！ 之后（含其后紧跟的成对收尾引号/括号，如 ." 。"），
+绝不在停顿/时间等非标点位置切句。找不到句末标点的超长连续句保持完整、不强行切开。
 
-  阶段 1 —— 标点正则切句（第一优先级）：
-    以 .。?？!！ 为句末边界（保护小数 3.14 / 连续点 ... / .env / 单字母缩写 e.g.，
-    复用 sentence_segmenter 的英文句点判定）。标点边界仅当左侧「已累积句长」
-    >= short_sec 才真正切；短于 short_sec 继续向后累积（避免切出过短碎句）。
-    切完后任何仍 > long_sec 的句子按词间停顿/时间「硬切」到 <= long_sec（达上限强制切）。
+四参数（默认值见 config.py / 暴露见 arg_schema），全部只在句末标点边界上起作用：
 
-  阶段 2 —— VAD 时长精修：
-    a) 长于 vad_max_sec 的句子：按内部「最大词间停顿」处递归切开（哪怕未超 long_sec），
-       仅在存在明显停顿（>= _MIN_SPLIT_GAP）时切，找不到干净停顿则保留。
-    b) 短于 vad_min_sec 的句子：并入相邻句（优先并入前句；合并后不得超过 long_sec）。
+  - short_sec（短句下限）：在句末标点边界，左侧累积句长不足此值则不切、继续并入下一句
+    （把过短碎句并进来），合并不得超过 long_sec。
+  - long_sec（合并硬上限）：累积/合并句子的时长硬上限，绝不跨越此值合并。
+  - vad_max_sec（软上限）：超过此值的句子，在其**内部句末标点**处再切到 <= 此值；
+    句内无句末标点（单个完整长句）则保持完整不切。
+  - vad_min_sec（VAD 下限）：仍短于此值的句子并入相邻句（合并后不超过 long_sec）。
 
-不跨说话人：相邻 segment 说话人不同、或 [识别失败] 标记块，均作为硬边界分块处理，
-块内拼接 words（绝对时间戳）后整体重切。说话人最终标签由管线 4.7 步按新句界重算。
+不跨说话人：相邻 segment 说话人不同、或 [识别失败] 标记块，均作为硬边界分块处理。
+说话人最终标签由管线 4.7 步按新句界重算。
 
-concat 不变量：输出各句文本顺序拼接 == 输入文本顺序拼接（块内切/并只重排边界，不增删字符）。
+concat 不变量：输出各句文本顺序拼接 == 输入文本顺序拼接（只重排边界，不增删字符）。
 """
 from app.pipeline.sentence_segmenter import (
-    _word_positions, _spans, _pieces, _is_english_period_end,
+    _word_positions, _spans, _pieces, _CLAUSE_PUNCT, _is_cjk,
 )
 
 _FAIL_MARK = "[识别失败]"
 # 句末标点正则集合（用户指定）：中文 。？！ + 英文 ? ！(全角) ! ；英文 . 走保护判定。
 _REGEX_END_NOPROTECT = "。？！?！!"
-_MIN_SPLIT_GAP = 0.15   # 阶段 2a 视为「可切停顿」的最小词间隙（秒），低于此不在停顿处切
+# 句末标点后紧跟的成对收尾符号（引号/括号）随句末一并归入前句，使切点落在 ." / 。" 之后。
+_CLOSERS = "\"'””’」』）)】》〉］]"
 
 
 def regex_segment(segments, *, long_sec, short_sec, vad_max_sec, vad_min_sec):
@@ -66,7 +67,7 @@ def regex_segment(segments, *, long_sec, short_sec, vad_max_sec, vad_min_sec):
 
 
 def _segment_block(block, long_sec, short_sec, vad_max_sec, vad_min_sec):
-    """对单个「同说话人、连续、带 words」的块整体重切。"""
+    """对单个「同说话人、连续、带 words」的块整体重切（切点只在句末标点处）。"""
     full_text = "".join(s["text"] for s in block)
     words = []
     for s in block:
@@ -77,32 +78,32 @@ def _segment_block(block, long_sec, short_sec, vad_max_sec, vad_min_sec):
 
     positions = _word_positions(full_text, words)
     n = len(full_text)
-    cuts = sorted(i + 1 for i in range(n) if _is_regex_end(full_text, i) and 0 < i + 1 < n)
-    spans = _spans(0, n, cuts)
+    cut_ends = [c for c in _punct_cut_ends(full_text) if 0 < c < n]
+    spans = _spans(0, n, cut_ends)
     pieces = _pieces(full_text, words, positions,
                      float(block[0]["start"]), float(block[-1]["end"]), spans, speaker)
 
-    sentences = _accumulate(pieces, short_sec)                      # 阶段 1：标点 + short
-    sentences = _flatten(_split_by_pause(s, long_sec, hard=True)    # 阶段 1：long 强制切
+    sentences = _accumulate(pieces, short_sec, long_sec)            # 标点边界累积（short/long）
+    sentences = _flatten(_split_overlong(s, vad_max_sec)           # 软上限：内部句末标点处再切
                          for s in sentences)
-    sentences = _flatten(_split_by_pause(s, vad_max_sec, hard=False)  # 阶段 2a：VAD 上限切
-                         for s in sentences)
-    sentences = _merge_short(sentences, vad_min_sec, long_sec)        # 阶段 2b：VAD 下限并
+    sentences = _merge_short(sentences, vad_min_sec, long_sec)     # VAD 下限：过短并入相邻
 
     return [_finalize(s) for s in sentences if (s.get("text") or "").strip()]
 
 
-# ─── 阶段 1：标点累积 ─────────────────────────────────────────────────
+# ─── 标点边界累积（short 下限 / long 硬上限）──────────────────────────
 
-def _accumulate(pieces, short_sec):
-    """按标点单元累积为句：左侧累积句长 < short_sec（或单元无词）则继续并入，否则在此切。"""
+def _accumulate(pieces, short_sec, long_sec):
+    """逐句末标点边界决定切/并：左侧累积句长 >= short_sec 即在此切；不足则并入下一句
+    （合并后不得超过 long_sec）。无词的尾随标点片段并入前句。"""
     sentences = []
     cur = None
     for p in pieces:
         if cur is None:
             cur = _copy(p)
             continue
-        if not p.get("words") or _dur(cur) < short_sec:
+        combined = float(p["end"]) - float(cur["start"])
+        if (not p.get("words") or _dur(cur) < short_sec) and combined <= long_sec:
             _merge_into(cur, p)
         else:
             sentences.append(cur)
@@ -112,77 +113,91 @@ def _accumulate(pieces, short_sec):
     return sentences
 
 
-# ─── 时长切分（停顿优先，硬模式按时间兜底）────────────────────────────
+# ─── 软上限：仅在内部句末标点处再切 ───────────────────────────────────
 
-def _split_by_pause(s, max_sec, *, hard):
-    """把时长 > max_sec 的句子切到 <= max_sec。
+def _split_overlong(s, max_sec):
+    """时长 > max_sec 的句子，在其内部句末标点边界处切到 <= max_sec。
 
-    优先在最大词间停顿（>= _MIN_SPLIT_GAP）处切；找不到干净停顿时：hard=True 按时间
-    兜底硬切（达上限强制切），hard=False 保留不切（无明显停顿不强行切完整句）。
+    若句内没有内部句末标点（单个完整长句），保持完整不切——绝不在非标点处下刀。
     """
     words = s.get("words")
-    if _dur(s) <= max_sec or not words or len(words) < 2:
+    if _dur(s) <= max_sec or not words:
         return [s]
-    gi, gmax = _largest_gap(words)
-    if gmax >= _MIN_SPLIT_GAP:
-        left, right = _split_at_word(s, gi + 1)
-        return _split_by_pause(left, max_sec, hard=hard) + _split_by_pause(right, max_sec, hard=hard)
-    if hard:
-        return _hard_split(s, max_sec)
-    return [s]
-
-
-def _hard_split(s, max_sec):
-    """无明显停顿的超长句：从句首起按累计时长达到 max_sec 处切，递归切尾。"""
-    words = s["words"]
-    t0 = words[0]["start"]
-    k = len(words)
-    for idx in range(1, len(words)):
-        if words[idx]["start"] - t0 > max_sec:
-            k = idx
+    text = s["text"]
+    positions = _word_positions(text, words)
+    n = len(text)
+    ends = [c for c in _punct_cut_ends(text) if 0 < c < n]
+    if not ends:
+        return [s]                                   # 无内部句末标点 → 保持完整
+    # 选「左侧时长 <= max_sec 的最大切点」；首个边界已超 max_sec 则取首个边界。
+    chosen = ends[0]
+    for c in ends:
+        left_end = _left_end_time(words, positions, c)
+        if left_end is None:
+            continue
+        if left_end - float(s["start"]) <= max_sec:
+            chosen = c
+        else:
             break
-    if k >= len(words):
-        return [s]
-    left, right = _split_at_word(s, k)
-    return [left] + _hard_split(right, max_sec)
+    left, right = _split_at_char(s, chosen)
+    return [left] + _split_overlong(right, max_sec)
 
 
-def _split_at_word(s, k):
-    """在第 k 个词之前把句子切成两句（1 <= k < len(words)）；时间取词级时间戳。"""
+def _punct_cut_ends(text):
+    """text 中所有句末标点的切点（标点之后、连同其后紧跟的成对收尾引号/括号）。"""
+    ends = []
+    n = len(text)
+    i = 0
+    while i < n:
+        if _is_regex_end(text, i):
+            j = i + 1
+            while j < n and text[j] in _CLOSERS:
+                j += 1
+            ends.append(j)
+            i = j
+        else:
+            i += 1
+    return ends
+
+
+def _left_end_time(words, positions, cut):
+    """字符切点 cut 左侧（position < cut）末词的 end 时间；左侧无词返回 None。"""
+    left_end = None
+    for w, pos in zip(words, positions):
+        if pos < cut:
+            left_end = w["end"]
+    return left_end
+
+
+def _split_at_char(s, cut):
+    """在字符下标 cut 处把句子切成两句；时间取词级时间戳。"""
     text, words = s["text"], s["words"]
-    cut = _word_positions(text, words)[k]
-    lw, rw = words[:k], words[k:]
+    positions = _word_positions(text, words)
+    lw = [w for w, pos in zip(words, positions) if pos < cut]
+    rw = [w for w, pos in zip(words, positions) if pos >= cut]
     left = {"text": text[:cut], "words": lw or None,
-            "start": lw[0]["start"], "end": lw[-1]["end"], "speaker": s.get("speaker")}
+            "start": s["start"], "end": (lw[-1]["end"] if lw else s["start"]),
+            "speaker": s.get("speaker")}
     right = {"text": text[cut:], "words": rw or None,
-             "start": rw[0]["start"], "end": rw[-1]["end"], "speaker": s.get("speaker")}
+             "start": (rw[0]["start"] if rw else s["end"]), "end": s["end"],
+             "speaker": s.get("speaker")}
     return left, right
 
 
-def _largest_gap(words):
-    """返回最大词间停顿的 (前词下标, 间隙秒)。"""
-    gi, gmax = 0, -1.0
-    for k in range(len(words) - 1):
-        gap = words[k + 1]["start"] - words[k]["end"]
-        if gap > gmax:
-            gi, gmax = k, gap
-    return gi, gmax
-
-
-# ─── 阶段 2b：过短句合并 ──────────────────────────────────────────────
+# ─── VAD 下限：过短句合并 ─────────────────────────────────────────────
 
 def _merge_short(sentences, vad_min_sec, long_sec):
     """短于 vad_min_sec 的句子并入相邻句：优先并入前句，合并后不得超过 long_sec。"""
     out = []
     for s in sentences:
         s = _copy(s)
-        if out and _dur(s) < vad_min_sec and (s["end"] - out[-1]["start"]) <= long_sec:
+        if out and _dur(s) < vad_min_sec and (float(s["end"]) - float(out[-1]["start"])) <= long_sec:
             _merge_into(out[-1], s)                   # 并入前句
             continue
         out.append(s)
     # 首句过短且无前句可并：尝试并入其后句（不超 long_sec）
     if len(out) >= 2 and _dur(out[0]) < vad_min_sec \
-            and (out[1]["end"] - out[0]["start"]) <= long_sec:
+            and (float(out[1]["end"]) - float(out[0]["start"])) <= long_sec:
         _merge_into_front(out[1], out[0])
         out.pop(0)
     return out
@@ -234,10 +249,30 @@ def _flatten(iterable_of_lists):
 
 
 def _is_regex_end(text, i):
-    """text[i] 是否为正则句末标点（英文句点复用 sentence_segmenter 的保护判定）。"""
+    """text[i] 是否为正则句末标点。
+
+    英文句点保留小数 3.14 / .env / 单字母缩写 e.g. 的保护，并把句点后紧跟的成对收尾
+    引号/括号视作透明（如 know." 仍判句末），与 _punct_cut_ends 的收尾符吞并一致。
+    """
     ch = text[i]
     if ch in _REGEX_END_NOPROTECT:
         return True
-    if ch == ".":
-        return _is_english_period_end(text, i)
-    return False
+    if ch != "." or i == 0:
+        return False
+    prev = text[i - 1]
+    j = i + 1                                   # 跨过成对收尾引号/括号再看后随字符
+    while j < len(text) and text[j] in _CLOSERS:
+        j += 1
+    nxt = text[j] if j < len(text) else ""
+    if prev in _CLAUSE_PUNCT:                   # 标点簇 ",." 仍按句末（受后随字符约束）
+        return nxt == "" or nxt.isspace() or nxt.isupper() or _is_cjk(nxt)
+    if not prev.isalnum():
+        return False                            # .env / 连续点 / 句点前是空白
+    if prev.isdigit() and nxt.isdigit():
+        return False                            # 小数 3.14
+    k = i - 1                                    # 单字母缩写保护（e.g. / i.e.）
+    while k >= 0 and text[k].isalnum():
+        k -= 1
+    if (i - 1 - k) < 2 and prev.isascii() and prev.isalpha():
+        return False
+    return nxt == "" or nxt.isspace() or nxt.isupper() or _is_cjk(nxt)

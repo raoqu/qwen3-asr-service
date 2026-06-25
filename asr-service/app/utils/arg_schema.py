@@ -128,23 +128,23 @@ ARG_SPECS = (
     ArgSpec(
         key="regex_long_sec", flags=("--regex-long-sec",), default=15.0, type=float,
         group="正则分句",
-        help="长句上限秒：句长达此值强制切（标点优先，无则按停顿/时间）(default: 15.0)",
-        help_en="Long-sentence cap in seconds: force a cut when reached (punctuation first, "
-                "else by pause/time) (default: 15.0)",
+        help="合并硬上限秒：累积/合并句子绝不跨越此值 (default: 15.0)",
+        help_en="Hard merge cap in seconds: accumulated/merged sentences never exceed this "
+                "(default: 15.0)",
     ),
     ArgSpec(
         key="regex_short_sec", flags=("--regex-short-sec",), default=3.0, type=float,
         group="正则分句",
-        help="短句下限秒：标点边界左侧累积句长不足此值不切，继续累积 (default: 3.0)",
-        help_en="Short-sentence floor in seconds: don't cut at a punctuation boundary while "
-                "the accumulated sentence is shorter than this (default: 3.0)",
+        help="短句下限秒：句末标点边界左侧累积句长不足此值则并入下一句 (default: 3.0)",
+        help_en="Short-sentence floor in seconds: at a punctuation boundary, if the left side "
+                "is shorter than this, merge it into the next sentence (default: 3.0)",
     ),
     ArgSpec(
         key="regex_vad_max_sec", flags=("--regex-vad-max-sec",), default=10.0, type=float,
         group="正则分句",
-        help="VAD 上限秒：完整句超此值按内部最大停顿切开（哪怕未超 long）(default: 10.0)",
-        help_en="VAD upper bound in seconds: split a complete sentence longer than this at its "
-                "largest internal pause (even if under long) (default: 10.0)",
+        help="软上限秒：超此值的句子在其内部句末标点处再切（句内无标点则保持完整）(default: 10.0)",
+        help_en="Soft upper bound in seconds: re-split a longer sentence at its internal "
+                "sentence-ending punctuation (kept whole if it has none) (default: 10.0)",
     ),
     ArgSpec(
         key="regex_vad_min_sec", flags=("--regex-vad-min-sec",), default=2.0, type=float,
