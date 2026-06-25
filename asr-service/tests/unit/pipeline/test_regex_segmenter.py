@@ -85,18 +85,38 @@ def test_long_sentence_without_punct_stays_whole():
 
 # ─── VAD 上限：仅在内部句末标点处再切（不在非标点处切）─────────────────
 
-def test_vad_max_resplits_at_internal_punct():
-    # 短句被并到一起形成 >vad_max 的合并句；vad_max 在内部句末标点处把它切回
+def test_priority_short_units_merge_long_sentence_whole():
+    # 过短句并入相邻（优先级 2），长完整句（无内部标点）保持完整（优先级 1）；都断在 。
     seg = _seg("好。妙。极佳的世界。", 0.0, 6.0,
                [_w("好", 0, 1), _w("妙", 1, 2),
                 _w("极", 2, 3), _w("佳", 3, 4), _w("的", 4, 5),
                 _w("世", 5, 5.5), _w("界", 5.5, 6)])
-    # short=4 → "好。"(1s)、"妙。"(累计2s) 持续并入，整体并成 "好。妙。极佳的世界。"(6s)
-    out = regex_segment([seg], long_sec=100.0, short_sec=4.0,
-                        vad_max_sec=3.0, vad_min_sec=0.0)
-    # vad_max=3：在内部句末标点处再切，每段 <=3s 且都断在 。 处
+    out = regex_segment([seg], long_sec=100.0, short_sec=1.5,
+                        vad_max_sec=2.5, vad_min_sec=0.0)
     assert [s["text"] for s in out] == ["好。妙。", "极佳的世界。"]
     assert all(s["text"].rstrip()[-1] in "。！？!?" for s in out)
+
+
+def test_vad_max_yields_to_short_bound():
+    # 优先级 2 > 3：vad_max 切分不得切出短于 short_sec 的碎句 → 宁可保留长句不切
+    from app.pipeline.regex_segmenter import _split_overlong
+    s = _seg("一。二。三四五六。", 0.0, 9.0,
+             [_w("一", 0, 1), _w("二", 1, 2),
+              _w("三", 2, 4), _w("四", 4, 6), _w("五", 6, 8), _w("六", 8, 9)])
+    # vad_max=3 但 short=4：任何在内部标点处的切都会产生 <4s 碎句 → 不切
+    out = _split_overlong(s, 3.0, 4.0)
+    assert len(out) == 1 and out[0]["text"] == s["text"]
+
+
+def test_split_overlong_regroups_at_internal_punct():
+    # _split_overlong 把 >vad_max 的多单元句在内部句末标点处重组为 <=vad_max 且 >=short 的句
+    from app.pipeline.regex_segmenter import _split_overlong
+    s = _seg("甲乙。丙丁。戊己。", 0.0, 6.0,
+             [_w("甲", 0, 1), _w("乙", 1, 2), _w("丙", 2, 3), _w("丁", 3, 4),
+              _w("戊", 4, 5), _w("己", 5, 6)])
+    out = _split_overlong(s, 2.5, 1.5)          # 每单元 2s：重组为 3 句各 2s
+    assert [x["text"] for x in out] == ["甲乙。", "丙丁。", "戊己。"]
+    assert all(x["text"].rstrip()[-1] in "。！？!?" for x in out)
 
 
 def test_vad_max_single_sentence_no_internal_punct_stays_whole():

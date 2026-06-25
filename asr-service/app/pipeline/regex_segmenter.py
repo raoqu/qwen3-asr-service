@@ -4,18 +4,22 @@
 segment_sentences 的输出再做一遍「标点正则 + 时长约束」重切，替换其结果；未开启时
 管线行为与现状完全一致（本模块不被调用）。
 
-核心约束——**所有句子边界只落在完整的句末标点处**：
-切点只允许出现在句末标点 .。?？!！ 之后（含其后紧跟的成对收尾引号/括号，如 ." 。"），
-绝不在停顿/时间等非标点位置切句。找不到句末标点的超长连续句保持完整、不强行切开。
+逻辑优先级（高 → 低，低优先级让位于高优先级）：
+
+  1. 句子完整性（绝对）：切点只允许落在句末标点 .。?？!！ 之后（含其后紧跟的成对收尾
+     引号/括号，如 ." 。"），绝不在停顿/时间等非标点位置切句。单个完整句（句内无句末
+     标点）无论多长都保持完整、不切。
+  2. 时长范围控制 [short_sec, long_sec]（前提：完整性）：在句末标点边界上拼接/拆分，
+     使句长落入区间——短于 short_sec 的句子并入相邻句（合并不得超过 long_sec 硬上限）。
+  3. VAD 最大时长 vad_max_sec（最低）：把超过此值的句子在其内部句末标点处再切到 <= 此值，
+     但**让位于 1、2**——不切出短于 short_sec 的碎句、不拆单个完整句；二者冲突时保留长句。
 
 四参数（默认值见 config.py / 暴露见 arg_schema），全部只在句末标点边界上起作用：
 
-  - short_sec（短句下限）：在句末标点边界，左侧累积句长不足此值则不切、继续并入下一句
-    （把过短碎句并进来），合并不得超过 long_sec。
-  - long_sec（合并硬上限）：累积/合并句子的时长硬上限，绝不跨越此值合并。
-  - vad_max_sec（软上限）：超过此值的句子，在其**内部句末标点**处再切到 <= 此值；
-    句内无句末标点（单个完整长句）则保持完整不切。
-  - vad_min_sec（VAD 下限）：仍短于此值的句子并入相邻句（合并后不超过 long_sec）。
+  - short_sec（短句下限，优先级 2）：累积/再切时的最短句长；不足则并入相邻句。
+  - long_sec（合并硬上限，优先级 2）：累积/合并句子绝不跨越此值。
+  - vad_max_sec（软上限，优先级 3）：超此值的句子在内部句末标点处再切，受 short_sec 约束。
+  - vad_min_sec（VAD 下限，优先级 2 收尾）：仍短于此值的句子并入相邻句（合并后不超 long_sec）。
 
 不跨说话人：相邻 segment 说话人不同、或 [识别失败] 标记块，均作为硬边界分块处理。
 说话人最终标签由管线 4.7 步按新句界重算。
@@ -83,10 +87,10 @@ def _segment_block(block, long_sec, short_sec, vad_max_sec, vad_min_sec):
     pieces = _pieces(full_text, words, positions,
                      float(block[0]["start"]), float(block[-1]["end"]), spans, speaker)
 
-    sentences = _accumulate(pieces, short_sec, long_sec)            # 标点边界累积（short/long）
-    sentences = _flatten(_split_overlong(s, vad_max_sec)           # 软上限：内部句末标点处再切
+    sentences = _accumulate(pieces, short_sec, long_sec)            # 优先级 2：标点边界累积
+    sentences = _flatten(_split_overlong(s, vad_max_sec, short_sec)  # 优先级 3：内部标点再切
                          for s in sentences)
-    sentences = _merge_short(sentences, vad_min_sec, long_sec)     # VAD 下限：过短并入相邻
+    sentences = _merge_short(sentences, vad_min_sec, long_sec)     # 优先级 2 收尾：过短并入相邻
 
     return [_finalize(s) for s in sentences if (s.get("text") or "").strip()]
 
@@ -113,34 +117,46 @@ def _accumulate(pieces, short_sec, long_sec):
     return sentences
 
 
-# ─── 软上限：仅在内部句末标点处再切 ───────────────────────────────────
+# ─── 优先级 3：软上限，仅在内部句末标点处再切（让位于完整性与短句下限）─────
 
-def _split_overlong(s, max_sec):
-    """时长 > max_sec 的句子，在其内部句末标点边界处切到 <= max_sec。
+def _split_overlong(s, max_sec, short_sec):
+    """时长 > max_sec 的句子，在其内部句末标点处贪心重组为若干 <= max_sec 的句子。
 
-    若句内没有内部句末标点（单个完整长句），保持完整不切——绝不在非标点处下刀。
+    让位于更高优先级：
+    - 优先级 1（完整性）：只在内部句末标点边界切；句内无句末标点则保持完整不切。
+    - 优先级 2（短句下限）：绝不切出短于 short_sec 的碎句——当前组仍不足 short_sec 时
+      继续并入（即便超过 max_sec），且末尾不足 short_sec 的组并回前一组。
     """
-    words = s.get("words")
-    if _dur(s) <= max_sec or not words:
+    if _dur(s) <= max_sec or not s.get("words"):
         return [s]
-    text = s["text"]
+    units = _units(s)
+    if len(units) <= 1:
+        return [s]                                   # 单个完整句 → 保持完整（优先级 1）
+
+    groups = [_copy(units[0])]
+    for u in units[1:]:
+        g = groups[-1]
+        if (float(u["end"]) - float(g["start"])) <= max_sec:
+            _merge_into(g, u)                        # 仍在 max_sec 内 → 并入
+        elif _dur(g) >= short_sec:
+            groups.append(_copy(u))                  # 当前组够长 → 在此句末标点处切
+        else:
+            _merge_into(g, u)                        # 当前组过短 → 继续并（优先级 2 > 3）
+    if len(groups) >= 2 and _dur(groups[-1]) < short_sec:
+        _merge_into(groups[-2], groups[-1])          # 末组过短 → 并回前一组
+        groups.pop()
+    return groups
+
+
+def _units(s):
+    """把句子拆成其内部句末标点分隔的「完整句单元」（各带词级时间戳）。"""
+    text, words = s["text"], s["words"]
     positions = _word_positions(text, words)
     n = len(text)
     ends = [c for c in _punct_cut_ends(text) if 0 < c < n]
-    if not ends:
-        return [s]                                   # 无内部句末标点 → 保持完整
-    # 选「左侧时长 <= max_sec 的最大切点」；首个边界已超 max_sec 则取首个边界。
-    chosen = ends[0]
-    for c in ends:
-        left_end = _left_end_time(words, positions, c)
-        if left_end is None:
-            continue
-        if left_end - float(s["start"]) <= max_sec:
-            chosen = c
-        else:
-            break
-    left, right = _split_at_char(s, chosen)
-    return [left] + _split_overlong(right, max_sec)
+    spans = _spans(0, n, ends)
+    return _pieces(text, words, positions,
+                   float(s["start"]), float(s["end"]), spans, s.get("speaker"))
 
 
 def _punct_cut_ends(text):
@@ -158,30 +174,6 @@ def _punct_cut_ends(text):
         else:
             i += 1
     return ends
-
-
-def _left_end_time(words, positions, cut):
-    """字符切点 cut 左侧（position < cut）末词的 end 时间；左侧无词返回 None。"""
-    left_end = None
-    for w, pos in zip(words, positions):
-        if pos < cut:
-            left_end = w["end"]
-    return left_end
-
-
-def _split_at_char(s, cut):
-    """在字符下标 cut 处把句子切成两句；时间取词级时间戳。"""
-    text, words = s["text"], s["words"]
-    positions = _word_positions(text, words)
-    lw = [w for w, pos in zip(words, positions) if pos < cut]
-    rw = [w for w, pos in zip(words, positions) if pos >= cut]
-    left = {"text": text[:cut], "words": lw or None,
-            "start": s["start"], "end": (lw[-1]["end"] if lw else s["start"]),
-            "speaker": s.get("speaker")}
-    right = {"text": text[cut:], "words": rw or None,
-             "start": (rw[0]["start"] if rw else s["end"]), "end": s["end"],
-             "speaker": s.get("speaker")}
-    return left, right
 
 
 # ─── VAD 下限：过短句合并 ─────────────────────────────────────────────
