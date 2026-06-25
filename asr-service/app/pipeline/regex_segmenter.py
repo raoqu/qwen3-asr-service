@@ -223,11 +223,23 @@ def _merge_into_front(b, a):
 
 
 def _finalize(s):
-    seg = {"start": round(float(s["start"]), 3),
-           "end": round(float(max(s["end"], s["start"])), 3),
+    """句子 start/end 严格取自其词级时间戳：start=首词 start、end=末词 end。
+
+    时间戳语义——句子本身不含其外缘的分句边界静音（句首词之前 / 句末词之后的 VAD）；
+    被合并的多个子句之间的停顿落在 [首词, 末词] 区间内，自然计入（也计入时长阈值判定）。
+    无词时（理论上不会出现）退回累积区间。
+    """
+    words = s.get("words")
+    if words:
+        start = min(w["start"] for w in words)
+        end = max(w["end"] for w in words)
+    else:
+        start, end = float(s["start"]), float(s["end"])
+    seg = {"start": round(float(start), 3),
+           "end": round(float(max(end, start)), 3),
            "text": s["text"]}
-    if s.get("words"):
-        seg["words"] = s["words"]
+    if words:
+        seg["words"] = words
     if s.get("speaker") is not None:
         seg["speaker"] = s["speaker"]
     return seg

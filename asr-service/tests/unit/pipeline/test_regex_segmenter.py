@@ -170,6 +170,28 @@ def test_vad_min_merges_leading_short_into_next():
     assert out[0]["start"] == 0.0
 
 
+# ─── 时间戳语义：外缘 VAD 排除、内部 VAD 计入 ─────────────────────────
+
+def test_merged_timestamps_exclude_outer_vad_include_inner():
+    # 句首前 0.5s 静音、词间 2.0s 停顿、句末后 1.5s 静音；short 很大 → 两句合并为一句
+    seg = _seg("好。妙。", 0.0, 5.0,
+               [_w("好", 0.5, 1.0), _w("妙", 3.0, 3.5)])
+    out = regex_segment([seg], long_sec=100.0, short_sec=10.0,
+                        vad_max_sec=100.0, vad_min_sec=0.0)
+    assert len(out) == 1
+    assert out[0]["start"] == 0.5 and out[0]["end"] == 3.5   # 不含外缘静音
+    # 内部停顿(1.0→3.0)计入：时长 = 3.5-0.5 = 3.0
+    assert round(out[0]["end"] - out[0]["start"], 3) == 3.0
+
+
+def test_sentence_start_end_pinned_to_words():
+    # 单句：start/end 取首/末词，不受输入 segment 外缘时间影响
+    seg = _seg("你好。", 0.0, 9.9,
+               [_w("你", 1.2, 1.8), _w("好", 1.8, 2.4)])
+    out = regex_segment([seg], **_LOOSE)
+    assert out[0]["start"] == 1.2 and out[0]["end"] == 2.4
+
+
 # ─── 说话人 / 透传 ────────────────────────────────────────────────────
 
 def test_no_merge_across_speaker_change():
