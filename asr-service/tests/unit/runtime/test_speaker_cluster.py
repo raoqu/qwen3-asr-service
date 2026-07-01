@@ -170,6 +170,50 @@ def test_offline_spectral_arpack_failure_degrades_single(monkeypatch):
     assert labels.tolist() == [0] * 45
 
 
+def test_offline_spectral_pruning_neighbors_capped_and_scale_invariant(monkeypatch):
+    """p-pruning 保留邻居数封顶且不随 N 增长——超长多人音频塌成单人的根因回归。
+
+    未封顶时保留邻居数 = n·pval 随 N 线性增长，把不同说话人的窗过度连通，抬高拉普拉斯
+    第二特征值使 eigen-gap 误判为单说话人（实测 45min 多人访谈整段 N=2781 塌成 1 人，
+    截取 24min 段 N=1541 正常分出多人）。此处拦截 eigsh，验证传入拉普拉斯每行非对角
+    非零数（对称化后保留邻居的并集）被 SPECTRAL_MAX_PNUM 封顶、且 N 翻倍不再增长。
+    """
+    import scipy.sparse.linalg as sla
+
+    from app.runtime.speaker_cluster import SPECTRAL_MAX_PNUM, _spectral
+
+    orig = sla.eigsh
+
+    def measure(n, max_pnum):
+        # 独立种子生成器：不依赖模块级共享 RNG，结果与测试执行顺序无关
+        rng = np.random.default_rng(n)
+        embs = rng.normal(size=(n, DIM)).astype(np.float32)
+        embs /= np.linalg.norm(embs, axis=1, keepdims=True)
+        seen = {}
+
+        def spy(lap, *a, **k):
+            off = np.array(lap)
+            np.fill_diagonal(off, 0.0)
+            seen["max_nnz"] = int((np.abs(off) > 1e-12).sum(axis=1).max())
+            return orig(lap, *a, **k)
+
+        monkeypatch.setattr(sla, "eigsh", spy)
+        _spectral(embs, max_spks=8, max_pnum=max_pnum)
+        return seen["max_nnz"]
+
+    # 封顶后每行邻居数被硬约束（对称化最多翻倍），N 翻倍不放大
+    capped_2k = measure(2000, SPECTRAL_MAX_PNUM)
+    capped_4k = measure(4000, SPECTRAL_MAX_PNUM)
+    assert capped_4k <= 2 * SPECTRAL_MAX_PNUM
+    assert capped_4k <= capped_2k + SPECTRAL_MAX_PNUM   # 不随 N 线性增长
+
+    # 反证 bug：不封顶时每行邻居数随 N 显著增长（≈翻倍）
+    uncapped_2k = measure(2000, 10**9)
+    uncapped_4k = measure(4000, 10**9)
+    assert uncapped_4k > uncapped_2k + 10
+    assert capped_4k < uncapped_4k                      # 封顶确实收紧了 N=4000 的连通度
+
+
 # ─── 后处理 ───
 
 def test_merge_close_clusters_by_centroid_similarity():
