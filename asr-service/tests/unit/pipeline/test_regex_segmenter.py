@@ -227,3 +227,35 @@ def test_concat_invariant():
     out = regex_segment([seg], long_sec=4.0, short_sec=1.0,
                         vad_max_sec=3.0, vad_min_sec=1.0)
     assert "".join(s["text"] for s in out) == seg["text"]
+
+
+# ─── 鲁棒边界：剔除错时离群词（幽灵词不劫持句子 start/end）──────────────
+
+def test_finalize_drops_far_outlier_word():
+    # 一个词带幽灵时间戳（落在别处，>30s），不得把句子 start 拽回错误时间
+    seg = _seg("alpha beta gamma delta", 0.0, 400.0,
+               [_w("alpha", 300.0, 300.4), _w("beta", 5.0, 5.4),      # beta 幽灵
+                _w("gamma", 300.8, 301.2), _w("delta", 301.2, 301.6)])
+    out = regex_segment([seg], **_LOOSE)
+    assert len(out) == 1
+    assert out[0]["start"] == 300.0 and out[0]["end"] == 301.6
+
+
+def test_finalize_keeps_normal_internal_pause():
+    # 句内正常停顿（<30s）不被误判为离群：整句边界照常取首尾词
+    seg = _seg("alpha beta gamma", 0.0, 20.0,
+               [_w("alpha", 1.0, 1.4), _w("beta", 8.0, 8.4), _w("gamma", 15.0, 15.4)])
+    out = regex_segment([seg], **_LOOSE)
+    assert out[0]["start"] == 1.0 and out[0]["end"] == 15.4
+
+
+def test_regex_output_starts_monotonic_under_bad_word_times():
+    # 端到端：即便词时间戳异常，输出段 start 也保证非递减（不泄漏乱序到结果）
+    seg = _seg("First one here. Second one there. Third one now.", 0.0, 500.0,
+               [_w("First", 400.0, 400.3), _w("one", 400.3, 400.6), _w("here", 400.6, 401.0),
+                _w("Second", 200.0, 200.3), _w("one", 200.3, 200.6), _w("there", 200.6, 201.0),
+                _w("Third", 450.0, 450.3), _w("one", 450.3, 450.6), _w("now", 450.6, 451.0)])
+    out = regex_segment([seg], **_LOOSE)
+    starts = [s["start"] for s in out]
+    assert starts == sorted(starts)                       # 全局非递减
+    assert "".join(s["text"] for s in out) == seg["text"]  # concat 不变量仍成立

@@ -229,3 +229,43 @@ def test_boundary_dedupe_drops_fully_duplicated_chunk():
               {"start": 3.0, "end": 6.0, "text": "好的我明白。"}]
     deduped = dedupe_contiguous_boundaries(chunks)
     assert [c["text"] for c in deduped] == ["好的我明白。"]
+
+
+# ─── _word_positions 鲁棒性：连字符容错 / 失配不污染游标 ────────────────
+
+def test_word_positions_hyphenated_token_matches():
+    # 词 token 'pretraining'（去连字符）应命中文本 'pre-training'，而非退化兜底
+    from app.pipeline.sentence_segmenter import _word_positions
+    ft = "We do pre-training here"
+    words = [_w("We", 0, 0), _w("do", 0, 0), _w("pretraining", 0, 0), _w("here", 0, 0)]
+    assert _word_positions(ft, words) == [0, 3, 6, 19]
+
+
+def test_word_positions_miss_does_not_corrupt_cursor():
+    # 中间词匹配不到时，后续词仍能正确定位（游标不被带偏）——碎成单词段的根因防护
+    from app.pipeline.sentence_segmenter import _word_positions
+    ft = "alpha beta gamma"
+    words = [_w("alpha", 0, 0), _w("ZZZ", 0, 0), _w("gamma", 0, 0)]
+    pos = _word_positions(ft, words)
+    assert pos[0] == 0 and pos[2] == 11          # gamma 仍命中原位
+    assert pos[0] <= pos[1] <= pos[2]            # 单调不回退
+
+
+# ─── 段间时间戳单调兜底 ───────────────────────────────────────────────
+
+def test_enforce_monotonic_starts_clamps_backward():
+    from app.pipeline.sentence_segmenter import enforce_monotonic_starts
+    segs = [{"start": 10.0, "end": 12.0, "text": "a"},
+            {"start": 4.0, "end": 4.2, "text": "b"},     # 回退乱序
+            {"start": 15.0, "end": 16.0, "text": "c"}]
+    out = enforce_monotonic_starts(segs)
+    assert [s["start"] for s in out] == [10.0, 10.0, 15.0]
+    assert out[1]["end"] == 10.0                          # end < 钳位后 start → 抬到 start
+
+
+def test_enforce_monotonic_starts_noop_when_ordered():
+    from app.pipeline.sentence_segmenter import enforce_monotonic_starts
+    segs = [{"start": 0.0, "end": 1.0, "text": "a"},
+            {"start": 1.0, "end": 2.0, "text": "b"}]
+    out = enforce_monotonic_starts([dict(s) for s in segs])
+    assert out == segs                                    # 正确顺序为恒等变换

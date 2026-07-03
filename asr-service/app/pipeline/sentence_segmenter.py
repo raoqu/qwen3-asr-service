@@ -20,11 +20,16 @@ evolution.md §二.4 的落地：把"处理用的 ASR 切块（受 MAX_SEGMENT_D
 
 输出句子级 segments（同形），其中 start/end 为绝对秒，words/speaker 视有无透传。
 """
+import logging
+
 from app import config as cfg
+
+logger = logging.getLogger(__name__)
 
 _SENTENCE_PUNCT = "。！？!?;；"   # 句末标点（中英）
 _CLAUSE_PUNCT = "，,、"          # 子句标点（超长句弱切点）
 _FAIL_MARK = "[识别失败]"
+_CORE_WINDOW = 160              # 骨架容错匹配的向前扫描窗口（字符）：连字符词就在游标附近
 
 
 def segment_sentences(chunks, *, max_segment=None,
@@ -118,7 +123,7 @@ def segment_sentences(chunks, *, max_segment=None,
         if s.get("speaker") is not None:
             seg["speaker"] = s["speaker"]
         out.append(seg)
-    return out
+    return enforce_monotonic_starts(out)
 
 
 # ─── 边界重复去重（处理块被拦腰切断的产物）────────────────────────────
@@ -309,16 +314,84 @@ def _spans(lo, hi, cut_ends):
 
 
 def _word_positions(full_text, words):
-    """每词在 full_text 中的起始下标（贪心游标推进）；匹配不到以游标兜底，不抛错。"""
+    """每词在 full_text 中的起始下标；贪心游标推进，对连字符/标点/空白差异鲁棒。
+
+    先精确匹配（快路径）；失配再用 alnum 骨架匹配（token 'pretraining' 命中文本
+    'pre-training'、'loglog' 命中 'log-log'）。仍失配时**不推进游标、沿用上一词位置**，
+    避免一次失配把游标推过正确位置、连锁把后续词甩出其应属片段——即整句碎成单词段
+    （seg 只剩 1 词、start/end 取自游离词而错位）的根因。
+    """
     positions, cursor = [], 0
     for w in words:
         t = w.get("text", "")
         idx = full_text.find(t, cursor) if t else -1
+        end = idx + len(t)
+        if idx < 0 and t:
+            idx, end = _find_core(full_text, t, cursor)   # 连字符/标点容错
         if idx < 0:
-            idx = cursor
+            positions.append(positions[-1] if positions else cursor)  # 失配：不污染游标
+            continue
         positions.append(idx)
-        cursor = idx + len(t)
+        cursor = end
     return positions
+
+
+def _find_core(full_text, token, start):
+    """以 token 的 alnum 骨架在 full_text[start:] 中定位（跳过间隔的空白/标点/连字符）。
+
+    返回 (起始下标, 骨架末尾下标+1)；窗口内找不到返回 (-1, -1)。大小写不敏感。
+    """
+    core = [ch.lower() for ch in token if ch.isalnum()]
+    if not core:
+        return -1, -1
+    hi = min(len(full_text), start + _CORE_WINDOW)
+    pos = start
+    while pos < hi:
+        if full_text[pos].isalnum():
+            end = _match_core_at(full_text, core, pos)
+            if end >= 0:
+                return pos, end
+        pos += 1
+    return -1, -1
+
+
+def _match_core_at(full_text, core, pos):
+    """full_text 从 pos 起、跳过非 alnum，逐字符匹配 core 全部字符则返回骨架末尾下标+1，否则 -1。"""
+    n = len(full_text)
+    j, ci = pos, 0
+    while ci < len(core):
+        while j < n and not full_text[j].isalnum():
+            j += 1
+        if j >= n or full_text[j].lower() != core[ci]:
+            return -1
+        j += 1
+        ci += 1
+    return j
+
+
+def enforce_monotonic_starts(segments):
+    """兜底：保证输出段 start 全局非递减，防上游词时间戳异常导致的段间乱序泄漏到输出。
+
+    音频是线性的，句子按阅读顺序即时间顺序，故全局 start 非递减对正确结果是恒等变换，
+    只会触及上游对齐异常（词时间戳落进静音空档等）产生的乱序段。仅钳位时间戳、不改文本
+    顺序（维持 concat 不变量）；发生钳位记 warning，便于回溯到上游对齐（见 asr_pipeline）。
+    """
+    prev_start = None
+    fixed = 0
+    for s in segments:
+        st = float(s["start"])
+        if prev_start is not None and st < prev_start - 1e-9:
+            s["start"] = round(prev_start, 3)
+            if float(s["end"]) < s["start"]:
+                s["end"] = s["start"]
+            st = s["start"]
+            fixed += 1
+        prev_start = st
+    if fixed:
+        logger.warning(
+            f"[segment] 修正 {fixed} 处段间时间戳乱序（疑似上游词对齐异常：词时间戳落进静音空档）"
+        )
+    return segments
 
 
 def _ends_with_sentence_punct(text):

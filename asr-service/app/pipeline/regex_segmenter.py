@@ -28,7 +28,13 @@ concat 不变量：输出各句文本顺序拼接 == 输入文本顺序拼接（
 """
 from app.pipeline.sentence_segmenter import (
     _word_positions, _spans, _pieces, _CLAUSE_PUNCT, _is_cjk,
+    enforce_monotonic_starts,
 )
+
+# 句子边界鲁棒化：与主时间簇相距超过此秒数的词视为错时离群（如落进静音空档的幽灵词），
+# 不参与 start/end 计算。阈值远大于任何句内正常停顿（VAD 早已在更小停顿处切句），
+# 故对正确结果是恒等变换，只剔除上游对齐产生的粗差。
+_OUTLIER_GAP_SEC = 30.0
 
 _FAIL_MARK = "[识别失败]"
 # 句末标点正则集合（用户指定）：中文 。？！ + 英文 ? ！(全角) ! ；英文 . 走保护判定。
@@ -67,7 +73,7 @@ def regex_segment(segments, *, long_sec, short_sec, vad_max_sec, vad_min_sec):
         block.append(seg)
         prev_spk = spk
     flush()
-    return out
+    return enforce_monotonic_starts(out)
 
 
 def _segment_block(block, long_sec, short_sec, vad_max_sec, vad_min_sec):
@@ -231,8 +237,7 @@ def _finalize(s):
     """
     words = s.get("words")
     if words:
-        start = min(w["start"] for w in words)
-        end = max(w["end"] for w in words)
+        start, end = _robust_bounds(words)
     else:
         start, end = float(s["start"]), float(s["end"])
     seg = {"start": round(float(start), 3),
@@ -243,6 +248,25 @@ def _finalize(s):
     if s.get("speaker") is not None:
         seg["speaker"] = s["speaker"]
     return seg
+
+
+def _robust_bounds(words):
+    """句子 start/end 取自词时间，但剔除与主时间簇脱节的错时离群词，防单个幽灵词劫持边界。
+
+    词 <= 2 无从判定主簇，原样 min/max。否则按 start 排序，以 _OUTLIER_GAP_SEC 为界切簇，
+    取词数最多的簇为主簇（正确句所有词紧邻同簇；落进静音空档的幽灵词自成远端小簇被排除）。
+    """
+    ws = sorted(words, key=lambda w: float(w["start"]))
+    if len(ws) <= 2:
+        return (min(float(w["start"]) for w in ws), max(float(w["end"]) for w in ws))
+    clusters = [[ws[0]]]
+    for w in ws[1:]:
+        if float(w["start"]) - float(clusters[-1][-1]["start"]) > _OUTLIER_GAP_SEC:
+            clusters.append([w])
+        else:
+            clusters[-1].append(w)
+    best = clusters[0] if len(clusters) == 1 else max(clusters, key=len)
+    return (min(float(w["start"]) for w in best), max(float(w["end"]) for w in best))
 
 
 def _flatten(iterable_of_lists):
