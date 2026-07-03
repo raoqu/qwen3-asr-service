@@ -9,6 +9,7 @@ from app.engines.punc_engine import PuncEngine
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
 from app.pipeline.sentence_segmenter import segment_sentences
 from app.pipeline.regex_segmenter import regex_segment
+from app.pipeline.vad_merge import merge_vad_segments
 from app.utils.result_parser import extract_text, extract_words
 from app.config import (
     UPLOADS_DIR,
@@ -421,28 +422,17 @@ class ASRPipeline:
         vad_segments: list[tuple[int, int]],
         max_segment_sec: float | None = None,
     ) -> list[tuple[int, int]]:
+        """贪心合并相邻 VAD 段为 ASR 处理块（纯逻辑见 vad_merge.merge_vad_segments）。
+
+        跨度上限 = max_segment_sec（缺省=cfg.MAX_SEGMENT_DURATION）；同时以
+        cfg.MAX_MERGE_SILENCE 限制被桥接的静音间隙，避免把长静音并入同一 chunk 造成
+        对齐器把词时间戳散布进静音区（落进静音空档的幽灵词 → 段级时间戳乱序）。
         """
-        贪心合并相邻 VAD 段：从第一段开始，持续追加后续段，
-        直到合并后总跨度（首段 start 到末段 end）超过 max_segment_sec（缺省=cfg），
-        则切出一组，开始新的一组。保留段间静音以维持时间戳准确性。
-        """
-        if not vad_segments:
-            return []
-
-        max_span_ms = int((max_segment_sec or cfg.MAX_SEGMENT_DURATION) * 1000)
-        merged = []
-        group_start, group_end = vad_segments[0]
-
-        for start_ms, end_ms in vad_segments[1:]:
-            # 如果追加后总跨度仍在阈值内，合并
-            if end_ms - group_start <= max_span_ms:
-                group_end = end_ms
-            else:
-                merged.append((group_start, group_end))
-                group_start, group_end = start_ms, end_ms
-
-        merged.append((group_start, group_end))
-        return merged
+        return merge_vad_segments(
+            vad_segments,
+            max_segment_sec or cfg.MAX_SEGMENT_DURATION,
+            cfg.MAX_MERGE_SILENCE,
+        )
 
     @staticmethod
     def _find_quiet_cut(data, sr, target, window, frame_ms=20, dip_ratio=0.5):

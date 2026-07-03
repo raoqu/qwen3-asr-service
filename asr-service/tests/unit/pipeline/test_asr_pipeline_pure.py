@@ -37,8 +37,15 @@ def test_merge_greedy_within_threshold(pipe, monkeypatch):
 
 def test_merge_boundary_equal_merges(pipe, monkeypatch):
     monkeypatch.setattr("app.config.MAX_SEGMENT_DURATION", 5)
-    # 跨度恰好 == 阈值 5000 -> 合并（<=）
-    assert pipe._merge_vad_segments([(0, 2000), (5000, 5000)]) == [(0, 5000)]
+    # 跨度恰好 == 阈值 5000 -> 合并（<=）；间隙=0 以隔离跨度边界判定（不受静音上限干扰）
+    assert pipe._merge_vad_segments([(0, 2000), (2000, 5000)]) == [(0, 5000)]
+
+
+def test_merge_does_not_bridge_long_silence(pipe, monkeypatch):
+    monkeypatch.setattr("app.config.MAX_SEGMENT_DURATION", 5)
+    # 跨度虽在阈值内，但两段间 3s 静音 > MAX_MERGE_SILENCE(2s) -> 不合并
+    # （防对齐器把词时间戳散布进静音区：落进静音空档的幽灵词根因）
+    assert pipe._merge_vad_segments([(0, 2000), (5000, 5000)]) == [(0, 2000), (5000, 5000)]
 
 
 def test_merge_boundary_over_splits(pipe, monkeypatch):
