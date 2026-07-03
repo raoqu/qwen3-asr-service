@@ -71,3 +71,51 @@ def test_fast_cjk_speech_passes():
 def test_empty_returns_none():
     assert sanitize_words([], 0.0, 10.0) == (None, None)
     assert sanitize_words(None, 0.0, 10.0) == (None, None)
+
+
+# ─── 完整性校验：对齐词数远少于文本词数（真实签名：60 词文本仅对齐 15 词）──
+
+def test_incomplete_alignment_rejected():
+    # 真实签名（2min 切片 chunk 22.6~40.7s）：文本 ~60 词、对齐器只产出 15 词
+    ws = [_w(f"w{i}", 25.5 + i * 0.35, 25.5 + (i + 1) * 0.35) for i in range(15)]
+    out, reason = sanitize_words(ws, 22.6, 18.1, expected_words=60)
+    assert out is None and "不完整" in reason
+
+
+def test_complete_alignment_passes():
+    ws = [_w(f"w{i}", 10.0 + i * 0.4, 10.0 + (i + 1) * 0.4) for i in range(20)]
+    out, reason = sanitize_words(ws, 10.0, 10.0, expected_words=21)
+    assert reason is None and len(out) == 20
+
+
+def test_short_text_not_checked_for_completeness():
+    # 文本词数 < 8：不做完整性判定（统计误差大）
+    ws = [_w("a", 1.0, 1.3)]
+    out, reason = sanitize_words(ws, 0.0, 5.0, expected_words=4)
+    assert reason is None
+
+
+def test_count_content_words_latin_and_cjk():
+    from app.utils.result_parser import count_content_words
+    assert count_content_words("Hello world, it's fine.") == 4
+    assert count_content_words("你好世界。") == 4
+    assert count_content_words("mix 中文 and English 词") == 6
+    assert count_content_words("") == 0
+
+
+# ─── 词时长分布：混合塌缩（部分正常+部分微词）────────────────────────────
+
+def test_mixed_collapse_micro_share_rejected():
+    # 真实签名：13 词正常铺开(~300ms/词) + 47 词挤成微词(~8ms)，总体速率/覆盖擦边通过
+    normal = [_w(f"n{i}", 25.5 + i * 0.31, 25.5 + i * 0.31 + 0.30) for i in range(13)]
+    squeezed = [_w(f"s{i}", 29.6 + i * 0.008, 29.6 + i * 0.008 + 0.007) for i in range(47)]
+    out, reason = sanitize_words(normal + squeezed, 22.6, 18.1, expected_words=60)
+    assert out is None and "塌缩" in reason
+
+
+def test_normal_micro_share_passes():
+    # 好区实测：~5% 零时长词（'I'/'to' 等）不应触发拒收
+    ws = [_w(f"w{i}", 10 + i * 0.3, 10 + i * 0.3 + 0.25) for i in range(19)]
+    ws.append(_w("I", 15.7, 15.7))                     # 1/20 = 5% 微词
+    out, reason = sanitize_words(ws, 10.0, 20.0, expected_words=20)
+    assert reason is None and len(out) == 20

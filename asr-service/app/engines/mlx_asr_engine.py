@@ -144,12 +144,18 @@ class MLXASREngine:
         """把 mlx TranscriptionResult 打包为引擎统一返回结构。"""
         out = {"text": (res.text or "").strip()}
         if self._enable_align:
+            raw = res.segments or []
             words = [
                 {"text": s.get("text") or "", "start": s["start"], "end": s["end"]}
-                for s in (res.segments or [])
+                for s in raw
                 if s.get("start") is not None and s.get("end") is not None
                 and (s.get("text") or "").strip()
             ]
+            dropped = len([s for s in raw if (s.get("text") or "").strip()]) - len(words)
+            if dropped > 0:
+                # ForcedAligner 部分词未产出时间戳（start/end None）——残缺词表由下游
+                # sanitize_words 的完整性校验整组拒收，此处仅记录用于定位对齐失效的 chunk。
+                logger.warning(f"MLX 对齐器丢词: {dropped}/{len(raw)} 个词无时间戳")
             if words:
                 out["words"] = words
         return out

@@ -316,18 +316,24 @@ def _spans(lo, hi, cut_ends):
 def _word_positions(full_text, words):
     """每词在 full_text 中的起始下标；贪心游标推进，对连字符/标点/空白差异鲁棒。
 
-    先精确匹配（快路径）；失配再用 alnum 骨架匹配（token 'pretraining' 命中文本
-    'pre-training'、'loglog' 命中 'log-log'）。仍失配时**不推进游标、沿用上一词位置**，
-    避免一次失配把游标推过正确位置、连锁把后续词甩出其应属片段——即整句碎成单词段
-    （seg 只剩 1 词、start/end 取自游离词而错位）的根因。
+    匹配必须**就近**（<= _CORE_WINDOW）：相邻词在拼接文本中本就相邻，远处的"成功"
+    匹配必是同词的后续重现（如 token 'nonparametric' 在真实位置拼作 'non-parametric'
+    精确匹配不中，却在数句之后的 'call nonparametric rates' 字面命中）——接受它会把
+    游标向前传送、之后全部词连锁错位（整句碎成单词段的根因）。故：
+    1. 精确匹配且落在窗口内 → 采用（快路径）；
+    2. 否则 alnum 骨架就近匹配（'pretraining' 命中 'pre-training'）；
+    3. 仍失败 → 不推进游标、沿用上一词位置（下一词可就近重新同步）。
     """
     positions, cursor = [], 0
     for w in words:
         t = w.get("text", "")
-        idx = full_text.find(t, cursor) if t else -1
-        end = idx + len(t)
-        if idx < 0 and t:
-            idx, end = _find_core(full_text, t, cursor)   # 连字符/标点容错
+        idx, end = -1, -1
+        if t:
+            j = full_text.find(t, cursor)
+            if 0 <= j and j - cursor <= _CORE_WINDOW:
+                idx, end = j, j + len(t)
+            else:
+                idx, end = _find_core(full_text, t, cursor)   # 连字符/标点容错（就近）
         if idx < 0:
             positions.append(positions[-1] if positions else cursor)  # 失配：不污染游标
             continue

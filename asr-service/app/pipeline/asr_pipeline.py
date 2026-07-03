@@ -10,7 +10,9 @@ from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
 from app.pipeline.sentence_segmenter import segment_sentences
 from app.pipeline.regex_segmenter import regex_segment
 from app.pipeline.vad_merge import merge_vad_segments
-from app.utils.result_parser import extract_text, extract_words, sanitize_words
+from app.utils.result_parser import (
+    extract_text, extract_words, sanitize_words, count_content_words,
+)
 from app.config import (
     UPLOADS_DIR,
     AUDIO_CHUNKS_DIR,
@@ -555,7 +557,9 @@ class ASRPipeline:
         """
         words = extract_words(results, offset_sec)
         if words and duration_sec is not None:
-            words, reason = sanitize_words(words, offset_sec, duration_sec)
+            expected = count_content_words(extract_text(results))
+            words, reason = sanitize_words(words, offset_sec, duration_sec,
+                                           expected_words=expected)
             if reason:
                 logger.warning(
                     f"[Pipeline] chunk {offset_sec:.1f}s~{offset_sec + duration_sec:.1f}s "
