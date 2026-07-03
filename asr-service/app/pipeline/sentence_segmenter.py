@@ -373,23 +373,43 @@ def enforce_monotonic_starts(segments):
     """兜底：保证输出段 start 全局非递减，防上游词时间戳异常导致的段间乱序泄漏到输出。
 
     音频是线性的，句子按阅读顺序即时间顺序，故全局 start 非递减对正确结果是恒等变换，
-    只会触及上游对齐异常（词时间戳落进静音空档等）产生的乱序段。仅钳位时间戳、不改文本
-    顺序（维持 concat 不变量）；发生钳位记 warning，便于回溯到上游对齐（见 asr_pipeline）。
+    只会触及上游对齐异常产生的乱序段。乱序段（start 回退到运行最大 start 之前）不做点
+    钳位（那会产出 start==end 的零时长段），而是把连续的乱序段整批重分布到「前一正常段
+    end ~ 后一正常段 start」区间内、按文本长度按比例分摊——时间是估计值但保持可读、非退
+    化且有序。不改文本顺序（维持 concat 不变量）；发生修正记 warning，便于回溯上游对齐。
     """
-    prev_start = None
+    n = len(segments)
     fixed = 0
-    for s in segments:
-        st = float(s["start"])
-        if prev_start is not None and st < prev_start - 1e-9:
-            s["start"] = round(prev_start, 3)
-            if float(s["end"]) < s["start"]:
-                s["end"] = s["start"]
-            st = s["start"]
+    i = 1
+    while i < n:
+        run_max = float(segments[i - 1]["start"])
+        if float(segments[i]["start"]) >= run_max - 1e-9:
+            i += 1
+            continue
+        j = i                                        # 连续乱序段 [i, j)
+        while j < n and float(segments[j]["start"]) < run_max - 1e-9:
+            j += 1
+        hi = float(segments[j]["start"]) if j < n else None
+        lo = float(segments[i - 1]["end"])
+        if hi is None:                               # 尾部乱序：沿用各段原时长顺排
+            hi = lo + sum(max(0.0, float(segments[k]["end"]) - float(segments[k]["start"]))
+                          for k in range(i, j))
+        lo = max(run_max, min(lo, hi))               # 保证 run_max <= lo <= hi（不破坏 j 处单调）
+        lens = [max(1, len(segments[k].get("text") or "")) for k in range(i, j)]
+        total = sum(lens)
+        cum = 0
+        for k, ln in zip(range(i, j), lens):
+            st = lo + (hi - lo) * cum / total
+            cum += ln
+            en = lo + (hi - lo) * cum / total
+            segments[k]["start"] = round(st, 3)
+            segments[k]["end"] = round(max(en, st), 3)
+            segments[k].pop("words", None)           # 幽灵词与重排时间矛盾，一并剥离
             fixed += 1
-        prev_start = st
+        i = j
     if fixed:
         logger.warning(
-            f"[segment] 修正 {fixed} 处段间时间戳乱序（疑似上游词对齐异常：词时间戳落进静音空档）"
+            f"[segment] 重排 {fixed} 处段间时间戳乱序（疑似上游词对齐异常，时间为区间内按文本比例的估计值）"
         )
     return segments
 

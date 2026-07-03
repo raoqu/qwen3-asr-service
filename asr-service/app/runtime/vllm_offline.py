@@ -18,7 +18,7 @@ import re
 
 from app import config as cfg
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
-from app.utils.result_parser import extract_text, extract_words
+from app.utils.result_parser import extract_text, extract_words, sanitize_words
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +130,13 @@ def _transcribe_progressive(engine, wav_path, duration, language, want_words,
         texts.append(extract_text(results))
         if want_words:
             w = extract_words(results, float(offset))
+            if w:
+                # 对齐校验：越界/乱序/塌缩的词组整组丢弃（该块回退无词，分句按字符比例估时）
+                w, reason = sanitize_words(w, float(offset), len(cwav) / float(sr))
+                if reason:
+                    logger.warning(
+                        f"[vLLM离线] chunk offset={float(offset):.1f}s "
+                        f"词级对齐无效，丢弃该块词时间戳: {reason}")
             if w:
                 words.extend(w)
         if progress_callback:

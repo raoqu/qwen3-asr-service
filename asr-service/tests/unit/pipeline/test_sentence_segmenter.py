@@ -253,14 +253,38 @@ def test_word_positions_miss_does_not_corrupt_cursor():
 
 # ─── 段间时间戳单调兜底 ───────────────────────────────────────────────
 
-def test_enforce_monotonic_starts_clamps_backward():
+def test_enforce_monotonic_starts_redistributes_backward():
     from app.pipeline.sentence_segmenter import enforce_monotonic_starts
     segs = [{"start": 10.0, "end": 12.0, "text": "a"},
             {"start": 4.0, "end": 4.2, "text": "b"},     # 回退乱序
             {"start": 15.0, "end": 16.0, "text": "c"}]
     out = enforce_monotonic_starts(segs)
-    assert [s["start"] for s in out] == [10.0, 10.0, 15.0]
-    assert out[1]["end"] == 10.0                          # end < 钳位后 start → 抬到 start
+    # 乱序段重分布到 前段end(12) ~ 后段start(15)，非零时长、非点钳位
+    assert out[1]["start"] == 12.0 and out[1]["end"] == 15.0
+    starts = [s["start"] for s in out]
+    assert starts == sorted(starts)
+
+
+def test_enforce_monotonic_starts_run_split_by_text_length():
+    from app.pipeline.sentence_segmenter import enforce_monotonic_starts
+    segs = [{"start": 10.0, "end": 12.0, "text": "a"},
+            {"start": 3.0, "end": 3.1, "text": "xx"},    # 乱序段1（2字符）
+            {"start": 4.0, "end": 4.1, "text": "xxxxxx"},  # 乱序段2（6字符）
+            {"start": 20.0, "end": 21.0, "text": "c"}]
+    out = enforce_monotonic_starts(segs)
+    # 区间 [12,20] 按文本长度 2:6 分摊 → 切点 12+8*0.25=14
+    assert out[1]["start"] == 12.0 and out[1]["end"] == 14.0
+    assert out[2]["start"] == 14.0 and out[2]["end"] == 20.0
+
+
+def test_enforce_monotonic_starts_strips_words_of_reordered():
+    from app.pipeline.sentence_segmenter import enforce_monotonic_starts
+    segs = [{"start": 10.0, "end": 12.0, "text": "a"},
+            {"start": 4.0, "end": 4.2, "text": "b",
+             "words": [{"text": "b", "start": 4.0, "end": 4.2}]},   # 幽灵词
+            {"start": 15.0, "end": 16.0, "text": "c"}]
+    out = enforce_monotonic_starts(segs)
+    assert "words" not in out[1]                          # 与重排时间矛盾的词被剥离
 
 
 def test_enforce_monotonic_starts_noop_when_ordered():

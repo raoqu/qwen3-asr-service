@@ -10,7 +10,7 @@ from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
 from app.pipeline.sentence_segmenter import segment_sentences
 from app.pipeline.regex_segmenter import regex_segment
 from app.pipeline.vad_merge import merge_vad_segments
-from app.utils.result_parser import extract_text, extract_words
+from app.utils.result_parser import extract_text, extract_words, sanitize_words
 from app.config import (
     UPLOADS_DIR,
     AUDIO_CHUNKS_DIR,
@@ -320,7 +320,8 @@ class ASRPipeline:
 
             for chunk_info, result in zip(batch_chunks, batch_results):
                 text = self._extract_text([result])
-                words = self._extract_words([result], chunk_info["offset_sec"])
+                words = self._extract_words(
+                    [result], chunk_info["offset_sec"], chunk_info["duration_sec"])
 
                 segment = {
                     "start": chunk_info["offset_sec"],
@@ -367,7 +368,8 @@ class ASRPipeline:
                     language=language,
                 )
                 text = self._extract_text(results)
-                words = self._extract_words(results, chunk_info["offset_sec"])
+                words = self._extract_words(
+                    results, chunk_info["offset_sec"], chunk_info["duration_sec"])
 
                 segment = {
                     "start": chunk_info["offset_sec"],
@@ -543,9 +545,22 @@ class ASRPipeline:
         """从 qwen_asr transcribe 结果中提取纯文本（委托共享实现）"""
         return extract_text(results)
 
-    def _extract_words(self, results, offset_sec: float) -> list[dict] | None:
-        """从 qwen_asr 结果中提取单词级时间戳（委托共享实现）"""
-        return extract_words(results, offset_sec)
+    def _extract_words(self, results, offset_sec: float,
+                       duration_sec: float | None = None) -> list[dict] | None:
+        """从 qwen_asr 结果中提取单词级时间戳（委托共享实现）。
+
+        给定 duration_sec 时做对齐校验（sanitize_words）：越界/乱序/塌缩的词组整组
+        丢弃并记 warning，该 chunk 回退 chunk 级时间戳——坏词流入分句会产生段级时间戳
+        漂移与回退乱序（如 28 词被塌缩进 3.3s、词时间超出 chunk 边界）。
+        """
+        words = extract_words(results, offset_sec)
+        if words and duration_sec is not None:
+            words, reason = sanitize_words(words, offset_sec, duration_sec)
+            if reason:
+                logger.warning(
+                    f"[Pipeline] chunk {offset_sec:.1f}s~{offset_sec + duration_sec:.1f}s "
+                    f"词级对齐无效，回退 chunk 级时间戳: {reason}")
+        return words
 
     def _cleanup(self, original_path: str, wav_path: str | None, chunk_dir: str):
         """清理临时文件"""
