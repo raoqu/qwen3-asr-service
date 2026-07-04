@@ -85,6 +85,7 @@ Response (completed):
       {
         "start": 0.0,
         "end": 3.2,
+        "vad_duration": 2.85,
         "text": "甚至出现交易几乎停滞的情况。",
         "words": [
           {"text": "甚", "start": 0.0, "end": 0.15},
@@ -115,6 +116,7 @@ Response (completed):
 | Field | Description |
 |-------|-------------|
 | `segments[]` | Sentence-level result array; each segment has `start` / `end` (seconds) and `text` |
+| `segments[].vad_duration` | Total VAD-detected speech duration (seconds) within the segment; always ≤ the span `end - start` (silence gaps excluded). Always present in standard mode; in vLLM mode only when speaker diarization (energy VAD) is enabled |
 | `segments[].words` | Word-level timestamps, **only present when `align_enabled=true`** |
 | `full_text` | Concatenated full text |
 | `language` | Detected language (`null` = auto-detect not backfilled) |

@@ -9,7 +9,7 @@ from app.engines.punc_engine import PuncEngine
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
 from app.pipeline.sentence_segmenter import segment_sentences
 from app.pipeline.regex_segmenter import regex_segment
-from app.pipeline.vad_merge import merge_vad_segments
+from app.pipeline.vad_merge import merge_vad_segments, vad_voiced_duration_sec
 from app.utils.result_parser import (
     extract_text, extract_words, sanitize_words, count_content_words,
 )
@@ -233,6 +233,11 @@ class ASRPipeline:
                     logger.info(f"[Pipeline] 声纹识别完成: {named}/{len(mapping)} 簇有名")
             if speaker_active and progress_callback:
                 progress_callback(0.95)
+
+            # 4.8 句级 VAD 语音总时长：句子区间内的实际发声时长（秒）。
+            #     由 vad_voiced_duration_sec 对原始 VAD 段求交累加，恒 ≤ 句子跨度；
+            #     此处再做一次防御性钳位 + 越界告警，兜底上游时间戳异常。
+            self._annotate_vad_duration(segments, vad_segments)
 
             # 5. 合并全文
             full_text = "".join(
@@ -565,6 +570,26 @@ class ASRPipeline:
                     f"[Pipeline] chunk {offset_sec:.1f}s~{offset_sec + duration_sec:.1f}s "
                     f"词级对齐无效，回退 chunk 级时间戳: {reason}")
         return words
+
+    def _annotate_vad_duration(self, segments: list[dict],
+                               vad_segments: list[tuple[int, int]]) -> None:
+        """为每个句子写入 vad_duration（该句区间内 VAD 语音总时长，秒）。
+
+        合理性：vad_duration 恒 ≤ 句子跨度（end - start）。vad_voiced_duration_sec 已由
+        构造保证该不变量，此处对四舍五入误差/上游时间戳异常再做钳位，越界则记 warning
+        并钳到句子跨度，确保返回值永不违反「VAD 总时长 ≤ 句子总时长」。
+        """
+        for seg in segments:
+            span = round(float(seg["end"]) - float(seg["start"]), 3)
+            span = max(0.0, span)
+            voiced = round(vad_voiced_duration_sec(seg["start"], seg["end"], vad_segments), 3)
+            if voiced > span:
+                logger.warning(
+                    f"[Pipeline] 句子 {seg['start']:.3f}s~{seg['end']:.3f}s "
+                    f"VAD 时长 {voiced:.3f}s 超过句子跨度 {span:.3f}s，已钳位（疑上游时间戳异常）"
+                )
+                voiced = span
+            seg["vad_duration"] = max(0.0, voiced)
 
     def _cleanup(self, original_path: str, wav_path: str | None, chunk_dir: str):
         """清理临时文件"""

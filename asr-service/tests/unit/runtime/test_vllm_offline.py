@@ -224,6 +224,11 @@ def test_run_with_diarization(patched_spk):
     assert len(r["segments"]) == 2
     assert all(s.get("speaker") == "A" for s in r["segments"])
     assert "diarize" not in r.get("warnings", [])
+    # 能量 VAD 覆盖 0~5s，两句均全程发声 → vad_duration == 句子跨度，且恒 ≤ 跨度
+    for s in r["segments"]:
+        span = round(s["end"] - s["start"], 3)
+        assert s["vad_duration"] == span
+        assert s["vad_duration"] <= span
 
 
 def test_run_with_identification(patched_spk):
@@ -254,10 +259,12 @@ def test_run_no_speaker_engine_warns_diarize(patched_spk):
     """未挂说话人引擎但请求 diarize → 软提示，转写不受影响。"""
     eng = _Engine(align=True, result=_spk_trans())
     task = {"task_id": "d3", "file_path": "/x.wav", "options": {"diarize": True}}
-    r = vo.run_vllm_offline(eng, task)        # speaker_engine=None
+    r = vo.run_vllm_offline(eng, task)        # speaker_engine=None，无能量 VAD
 
     assert "speakers" not in r
     assert "diarize" in r["warnings"]
+    # vLLM 模式无 funasr VAD：未提供能量 VAD 时不写 vad_duration
+    assert all("vad_duration" not in s for s in r["segments"])
 
 
 # ── run_vllm_offline 端到端 ────────────────────────────────

@@ -18,6 +18,7 @@ import re
 
 from app import config as cfg
 from app.pipeline.audio_preprocessor import convert_to_wav, get_audio_duration
+from app.pipeline.vad_merge import vad_voiced_duration_sec
 from app.utils.result_parser import (
     extract_text, extract_words, sanitize_words, count_content_words,
 )
@@ -83,6 +84,11 @@ def run_vllm_offline(engine, task, *, progress_callback=None, cancelled=None,
         if not with_words:
             for seg in segments:
                 seg.pop("words", None)
+
+        # 句级 VAD 语音总时长：仅在离线能量 VAD 可用时给出（vLLM 模式无 funasr VAD）。
+        # 恒 ≤ 句子跨度，与 standard /v2/asr 的 vad_duration 语义一致。
+        if energy_vad is not None and segments:
+            _annotate_vad_duration(segments, wav_path, energy_vad)
 
         # 说话人分离/识别（可选；容错——失败只丢标签，不破坏转写）
         speakers = None
@@ -167,6 +173,33 @@ def _collect_warnings(engine, opts: dict, identify_speakers: bool, *,
             or opts.get("speaker_id_margin") is not None) and not spk_id_ready:
         w.append("speaker_id_threshold/margin")
     return w
+
+
+def _annotate_vad_duration(segments, wav_path, energy_vad):
+    """给每个句子写入 vad_duration（句区间内 VAD 语音总时长，秒），恒 ≤ 句子跨度。
+
+    容错：读音频或 VAD 失败只跳过标注（不写字段），绝不影响转写主链路。越界（四舍五入
+    误差/时间戳异常）钳到句子跨度并记 warning，保证「VAD 总时长 ≤ 句子总时长」不变量。
+    """
+    import soundfile as sf
+    try:
+        wav, sr = sf.read(wav_path, dtype="float32")
+        if wav.ndim > 1:                                  # 兜底：多声道取均值
+            wav = wav.mean(axis=1)
+        vad_segments = energy_vad.detect_array(wav, sr)
+    except Exception as e:
+        logger.warning(f"[vllm-offline] VAD 时长标注失败，跳过: {e}")
+        return
+    for seg in segments:
+        span = max(0.0, round(float(seg["end"]) - float(seg["start"]), 3))
+        voiced = round(vad_voiced_duration_sec(seg["start"], seg["end"], vad_segments), 3)
+        if voiced > span:
+            logger.warning(
+                f"[vllm-offline] 句子 {seg['start']:.3f}s~{seg['end']:.3f}s "
+                f"VAD 时长 {voiced:.3f}s 超过句子跨度 {span:.3f}s，已钳位"
+            )
+            voiced = span
+        seg["vad_duration"] = max(0.0, voiced)
 
 
 def _diarize_and_identify(speaker_engine, speaker_service, energy_vad, wav_path, segments,

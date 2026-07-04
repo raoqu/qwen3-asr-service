@@ -39,3 +39,27 @@ def merge_vad_segments(vad_segments, max_span_sec, max_gap_sec):
 
     merged.append((group_start, group_end))
     return merged
+
+
+def vad_voiced_duration_sec(start_sec, end_sec, vad_segments):
+    """句子区间 [start_sec, end_sec]（秒）内的 VAD 语音总时长（秒）。
+
+    对每个 VAD 段与句子区间求交并累加。vad_segments 为按 start 升序、互不重叠的
+    [(start_ms, end_ms), ...]（VADEngine.detect 输出）。由于各交集都被钳在句子区间内且
+    VAD 段互不重叠，累加结果**恒 ≤ 句子跨度（end - start）**——这是调用方做合理性自检
+    （vad 总时长不得大于句子总时长）的数学保证。
+
+    空区间或 start >= end 返回 0.0。
+    """
+    lo = float(start_sec) * 1000.0
+    hi = float(end_sec) * 1000.0
+    if hi <= lo:
+        return 0.0
+    total_ms = 0.0
+    for s_ms, e_ms in vad_segments:
+        if e_ms <= lo:
+            continue          # 该段完全在句子左侧
+        if s_ms >= hi:
+            break             # 已升序，后续段都在句子右侧
+        total_ms += min(e_ms, hi) - max(s_ms, lo)
+    return total_ms / 1000.0

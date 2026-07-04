@@ -85,6 +85,7 @@ GET /v2/tasks/{task_id}
       {
         "start": 0.0,
         "end": 3.2,
+        "vad_duration": 2.85,
         "text": "甚至出现交易几乎停滞的情况。",
         "words": [
           {"text": "甚", "start": 0.0, "end": 0.15},
@@ -115,6 +116,7 @@ GET /v2/tasks/{task_id}
 | 字段 | 说明 |
 |------|------|
 | `segments[]` | 句级结果数组，每段含 `start` / `end`（秒）、`text` |
+| `segments[].vad_duration` | 该句区间内 VAD 检测到的语音总时长（秒），恒 ≤ 句子跨度 `end - start`（静音间隙不计入）。standard 模式恒存在；vLLM 模式仅在启用说话人（能量 VAD 可用）时给出 |
 | `segments[].words` | 单词级时间戳，**仅 `align_enabled=true` 时存在** |
 | `full_text` | 全文拼接 |
 | `language` | 识别语言（`null` = 自动检测未回填） |
